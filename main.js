@@ -248,8 +248,14 @@ function requestChatCompletion(endpoint, apiKey, model, messages, maxTokens) {
     }
 
     const startTime = Date.now();
-    const fullUrl = joinApiPath(endpoint, 'chat/completions');
-    const apiUrl = new URL(fullUrl);
+    let apiUrl;
+    try {
+      const fullUrl = joinApiPath(endpoint, 'chat/completions');
+      apiUrl = new URL(fullUrl);
+    } catch (e) {
+      resolve({ success: false, error: 'Invalid API endpoint URL: ' + endpoint, statusCode: 0, latencyMs: 0 });
+      return;
+    }
 
     const requestBody = JSON.stringify({
       model: model || 'google/gemini-2.0-flash-exp:free',
@@ -462,9 +468,21 @@ function setupIPC() {
   ipcMain.handle('db:import', (event, jsonStr) => {
     try {
       const parsed = JSON.parse(jsonStr);
+      // Normalize with defaults before migration (handle missing fields)
+      if (!parsed.settings) parsed.settings = {};
+      parsed.settings = {
+        ...DEFAULT_DATA.settings,
+        ...parsed.settings,
+        hotkeys: { ...DEFAULT_DATA.settings.hotkeys, ...(parsed.settings.hotkeys || {}) },
+      };
+      if (!parsed.words) parsed.words = [];
+      if (!parsed.stats) parsed.stats = { ...DEFAULT_DATA.stats };
+      if (!parsed.lookupHistory) parsed.lookupHistory = [];
+      if (!parsed.aiCache) parsed.aiCache = {};
       const { data } = migrateDatabase(parsed);
       return saveDatabase(data);
-    } catch {
+    } catch (e) {
+      console.error('Import failed:', e.message);
       return false;
     }
   });
@@ -1173,7 +1191,16 @@ app.whenReady().then(() => {
   const db = loadDatabase();
   const hotkeys = db.settings.hotkeys || { lookup: 'CommandOrControl+Shift+Z' };
   currentHotkeys = { ...hotkeys };
-  registerAllHotkeys(hotkeys);
+  const hkResults = registerAllHotkeys(hotkeys);
+  const failedHks = Object.entries(hkResults).filter(([, ok]) => !ok);
+  if (failedHks.length > 0) {
+    console.warn('⚠️ Some hotkeys failed to register:', failedHks.map(f => f[0]).join(', '));
+    // Open settings so user can fix
+    showDashboard();
+    setTimeout(() => {
+      if (dashboardWindow) dashboardWindow.webContents.send('navigate', 'settings');
+    }, 1000);
+  }
 
   // Prune stale cache on startup
   const cutoff = Date.now() - 30 * 86400000;

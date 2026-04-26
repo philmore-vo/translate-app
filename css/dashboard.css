@@ -628,8 +628,10 @@ a:hover { text-decoration: underline; }
 }
 
 .btn-fc:hover { transform: translateY(-2px); }
-.btn-fc-hard:hover { border-color: var(--red); color: var(--red); background: var(--red-bg); }
-.btn-fc-ok:hover { border-color: var(--orange); color: var(--orange); background: var(--orange-bg); }
+.btn-fc-again { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+.btn-fc-again:hover { filter: brightness(0.9); }
+.btn-fc-hard:hover { border-color: var(--orange); color: var(--orange); background: var(--orange-bg); }
+.btn-fc-ok:hover { border-color: var(--blue, #5B8DEF); color: var(--blue, #5B8DEF); }
 .btn-fc-easy:hover { border-color: var(--green); color: var(--green); background: var(--green-bg); }
 
 /* ══════════════════════════════════

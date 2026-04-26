@@ -215,7 +215,7 @@
     techLoader.style.display = 'none';
 
     techDef.textContent = ai.definition || '';
-    techVnText.textContent = ai.vietnameseMeaning || '';
+    techVnText.textContent = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
 
     if (ai.topic) {
       topicBadge.textContent = ai.topic;

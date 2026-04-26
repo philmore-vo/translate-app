@@ -112,7 +112,7 @@
     if (query) {
       filtered = filtered.filter((w) =>
         w.word.toLowerCase().includes(query) ||
-        (w.vietnameseMeaning || '').toLowerCase().includes(query) ||
+        (w.translatedMeaning || w.vietnameseMeaning || '').toLowerCase().includes(query) ||
         (w.topic || '').toLowerCase().includes(query) ||
         (w.technicalNote || '').toLowerCase().includes(query)
       );
@@ -171,7 +171,7 @@
           </div>
           ${w.isFavorite ? '<span class="wc-fav">⭐</span>' : ''}
         </div>
-        ${w.vietnameseMeaning ? `<div class="wc-vn">🇻🇳 ${escHtml(w.vietnameseMeaning)}</div>` : ''}
+        ${(w.translatedMeaning || w.vietnameseMeaning) ? `<div class="wc-vn">🌐 ${escHtml(w.translatedMeaning || w.vietnameseMeaning)}</div>` : ''}
         <div class="wc-definition">${escHtml(def)}</div>
         <div class="wc-footer">
           ${w.topic ? `<span class="wc-topic">${escHtml(w.topic)}</span>` : '<span></span>'}
@@ -215,7 +215,7 @@
     body.innerHTML = `
       <div class="md-word">${escHtml(w.word)}</div>
       ${w.phonetic ? `<div class="md-phonetic">${escHtml(w.phonetic)}</div>` : ''}
-      ${w.vietnameseMeaning ? `<div class="md-vn">🇻🇳 ${escHtml(w.vietnameseMeaning)}</div>` : ''}
+      ${(w.translatedMeaning || w.vietnameseMeaning) ? `<div class="md-vn">🌐 ${escHtml(w.translatedMeaning || w.vietnameseMeaning)}</div>` : ''}
 
       ${meaningsHtml ? `
         <div class="md-section">
@@ -290,6 +290,7 @@
     $('#btn-start-study').addEventListener('click', startStudy);
     $('#flashcard').addEventListener('click', revealCard);
     // SM-2 quality buttons: Again=0, Hard=3, Good=4, Easy=5
+    $('#btn-fc-again').addEventListener('click', () => nextCard(0));
     $('#btn-fc-hard').addEventListener('click', () => nextCard(3));
     $('#btn-fc-ok').addEventListener('click', () => nextCard(4));
     $('#btn-fc-easy').addEventListener('click', () => nextCard(5));
@@ -517,6 +518,8 @@
         } else {
           hkStatus.textContent = '✗ ' + hkResult.error;
           hkStatus.style.color = 'var(--red)';
+          setTimeout(() => { hkStatus.textContent = ''; }, 4000);
+          return; // Don't save other settings if hotkeys failed
         }
         setTimeout(() => { hkStatus.textContent = ''; }, 4000);
       }
