@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EngiLink Dictionary</title>
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+  <div id="app" class="app-layout">
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">EngiLink</span>
+          <span class="brand-sub">Dictionary</span>
+        </div>
+      </div>
+
+      <div class="sidebar-nav">
+        <button class="nav-item active" data-page="library" id="nav-library">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <span>Library</span>
+        </button>
+        <button class="nav-item" data-page="study" id="nav-study">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          <span>Study</span>
+        </button>
+        <button class="nav-item" data-page="stats" id="nav-stats">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          <span>Statistics</span>
+        </button>
+        <button class="nav-item" data-page="lookup" id="nav-lookup">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <span>Lookup</span>
+        </button>
+      </div>
+
+      <div class="sidebar-bottom">
+        <button class="nav-item" data-page="settings" id="nav-settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>Settings</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+      
+      <!-- ═══════ LIBRARY PAGE ═══════ -->
+      <section class="page active" id="page-library">
+        <div class="page-header">
+          <h1 class="page-title">Word Library</h1>
+          <div class="page-actions">
+            <div class="search-box" id="search-box">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="search-input" placeholder="Search words..." autocomplete="off">
+            </div>
+            <select class="filter-select" id="filter-topic">
+              <option value="">All Topics</option>
+            </select>
+            <select class="filter-select" id="filter-sort">
+              <option value="recent">Recent</option>
+              <option value="alpha">A → Z</option>
+              <option value="frequency">Most Looked Up</option>
+              <option value="favorites">Favorites First</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="word-grid" id="word-grid">
+          <!-- Word cards rendered here -->
+        </div>
+
+        <div class="empty-state" id="library-empty" style="display:none;">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <h3>No words yet</h3>
+          <p>Copy a word and press <kbd>Ctrl+Shift+Z</kbd> to look it up!</p>
+        </div>
+      </section>
+
+      <!-- ═══════ STUDY PAGE ═══════ -->
+      <section class="page" id="page-study">
+        <div class="page-header">
+          <h1 class="page-title">Study Mode</h1>
+          <div class="page-actions">
+            <select class="filter-select" id="study-topic-filter">
+              <option value="">All Topics</option>
+            </select>
+            <button class="btn-primary" id="btn-start-study">Start Review</button>
+          </div>
+        </div>
+
+        <!-- Study Intro -->
+        <div class="study-intro" id="study-intro">
+          <div class="study-hero">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <h2>Flashcard Review</h2>
+            <p>Test your memory with flashcards from your word library.</p>
+          </div>
+        </div>
+
+        <!-- Flashcard Area -->
+        <div class="flashcard-area" id="flashcard-area" style="display:none;">
+          <div class="flashcard-progress">
+            <span id="study-progress-text">1 / 10</span>
+            <div class="progress-bar">
+              <div class="progress-fill" id="study-progress-fill"></div>
+            </div>
+          </div>
+          <div class="flashcard" id="flashcard">
+            <div class="flashcard-front" id="flashcard-front">
+              <div class="fc-word" id="fc-word"></div>
+              <div class="fc-phonetic" id="fc-phonetic"></div>
+              <div class="fc-hint">Click to reveal</div>
+            </div>
+            <div class="flashcard-back" id="flashcard-back" style="display:none;">
+              <div class="fc-definition" id="fc-definition"></div>
+              <div class="fc-tech" id="fc-tech"></div>
+              <div class="fc-vn" id="fc-vn"></div>
+            </div>
+          </div>
+          <div class="flashcard-actions" id="flashcard-actions" style="display:none;">
+            <button class="btn-fc btn-fc-hard" id="btn-fc-hard">Hard 😰</button>
+            <button class="btn-fc btn-fc-ok" id="btn-fc-ok">OK 🤔</button>
+            <button class="btn-fc btn-fc-easy" id="btn-fc-easy">Easy 😎</button>
+          </div>
+        </div>
+
+        <!-- Study Complete -->
+        <div class="study-complete" id="study-complete" style="display:none;">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          <h2>Review Complete!</h2>
+          <p id="study-summary"></p>
+          <button class="btn-primary" id="btn-study-again">Study Again</button>
+        </div>
+      </section>
+
+      <!-- ═══════ STATISTICS PAGE ═══════ -->
+      <section class="page" id="page-stats">
+        <div class="page-header">
+          <h1 class="page-title">Statistics</h1>
+        </div>
+
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card stat-accent">
+            <div class="stat-value" id="stat-total-words">0</div>
+            <div class="stat-label">Total Words</div>
+          </div>
+          <div class="stat-card stat-green">
+            <div class="stat-value" id="stat-total-lookups">0</div>
+            <div class="stat-label">Total Lookups</div>
+          </div>
+          <div class="stat-card stat-orange">
+            <div class="stat-value" id="stat-streak">0</div>
+            <div class="stat-label">Day Streak 🔥</div>
+          </div>
+          <div class="stat-card stat-cyan">
+            <div class="stat-value" id="stat-today">0</div>
+            <div class="stat-label">Today's Lookups</div>
+          </div>
+          <div class="stat-card stat-pink">
+            <div class="stat-value" id="stat-favorites">0</div>
+            <div class="stat-label">Favorites ⭐</div>
+          </div>
+        </div>
+
+        <div class="stats-section">
+          <h2 class="section-title">Top Topics</h2>
+          <div class="topic-bars" id="topic-bars">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <div class="stats-section">
+          <h2 class="section-title">Recently Looked Up</h2>
+          <div class="recent-words" id="recent-words">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════ LOOKUP PAGE ═══════ -->
+      <section class="page" id="page-lookup">
+        <div class="page-header">
+          <h1 class="page-title">Quick Lookup</h1>
+        </div>
+
+        <div class="lookup-container">
+          <div class="lookup-input-group">
+            <input type="text" id="lookup-input" class="lookup-input" placeholder="Type a word to look up..." autocomplete="off">
+            <button class="btn-primary" id="btn-lookup">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              Look Up
+            </button>
+          </div>
+
+          <div class="lookup-result" id="lookup-result" style="display:none;">
+            <!-- Full result rendered here -->
+          </div>
+
+          <div class="lookup-loading" id="lookup-loading" style="display:none;">
+            <div class="spinner"></div>
+            <span>Looking up...</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════ SETTINGS PAGE ═══════ -->
+      <section class="page" id="page-settings">
+        <div class="page-header">
+          <h1 class="page-title">Settings</h1>
+        </div>
+
+        <div class="settings-grid">
+          <!-- API Configuration -->
+          <div class="settings-card">
+            <h3 class="settings-card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+              AI Configuration
+            </h3>
+            <div class="setting-row">
+              <label class="setting-label" for="setting-api-key">API Key</label>
+              <input type="password" id="setting-api-key" class="setting-input" placeholder="Enter your API key (Bearer token)">
+              <p class="setting-hint">Works with any OpenAI-compatible API: <a href="#" id="link-get-key">OpenRouter</a>, Groq, Together, OpenAI, etc.</p>
+            </div>
+            <div class="setting-row">
+              <label class="setting-label" for="setting-model">Model</label>
+              <input type="text" id="setting-model" class="setting-input" placeholder="google/gemini-2.0-flash-exp:free">
+              <p class="setting-hint">e.g. google/gemini-2.0-flash-exp:free, gpt-4o-mini, llama-3.1-8b-instant</p>
+            </div>
+            <div class="setting-row">
+              <label class="setting-label" for="setting-endpoint">API Endpoint</label>
+              <input type="text" id="setting-endpoint" class="setting-input" placeholder="https://openrouter.ai/api/v1">
+              <p class="setting-hint">Base URL for OpenAI-compatible API (without /chat/completions)</p>
+            </div>
+          </div>
+
+          <!-- Behavior -->
+          <div class="settings-card">
+            <h3 class="settings-card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+              Behavior
+            </h3>
+            <div class="setting-row">
+              <label class="setting-label">
+                <span>Auto-save words</span>
+                <span class="setting-desc">Automatically save every looked-up word</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="setting-autosave" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <label class="setting-label">
+                <span>Show related words</span>
+                <span class="setting-desc">Display semantic links in overlay</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="setting-related" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Data Management -->
+          <div class="settings-card">
+            <h3 class="settings-card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+              Data Management
+            </h3>
+            <p class="setting-hint" id="db-path-display">Database: loading...</p>
+            <div class="setting-actions">
+              <button class="btn-secondary" id="btn-export-data">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Export JSON
+              </button>
+              <button class="btn-secondary" id="btn-import-data">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                Import JSON
+              </button>
+              <button class="btn-danger" id="btn-reset-data">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                Reset All Data
+              </button>
+            </div>
+          </div>
+
+          <!-- About -->
+          <div class="settings-card">
+            <h3 class="settings-card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+              About
+            </h3>
+            <p class="about-text">
+              <strong>EngiLink Dictionary v1.0</strong><br>
+              A smart English-Vietnamese dictionary with AI-powered translation.<br>
+              <span class="text-muted">Hotkey: Ctrl+Shift+Z &nbsp;|&nbsp; Dictionary API: dictionaryapi.dev</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="settings-save-bar">
+          <button class="btn-primary" id="btn-save-settings">Save Settings</button>
+          <span class="save-status" id="save-status"></span>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Word Detail Modal -->
+  <div class="modal-overlay" id="word-detail-modal" style="display:none;">
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+      <div class="modal-body" id="modal-body">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden file input for import -->
+  <input type="file" id="import-file-input" accept=".json" style="display:none;">
+
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
