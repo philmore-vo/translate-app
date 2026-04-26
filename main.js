@@ -55,8 +55,14 @@ function migrateDatabase(data) {
 
     // Deep-merge settings.hotkeys (not shallow)
     const defaultHotkeys = { ...DEFAULT_DATA.settings.hotkeys };
-    data.settings.hotkeys = { ...defaultHotkeys, ...(data.settings.hotkeys || {}) };
-    // Remove old single hotkey field
+    const existingHotkeys = data.settings.hotkeys || {};
+    const hasCustomLookup = existingHotkeys.lookup && existingHotkeys.lookup !== DEFAULT_DATA.settings.hotkeys.lookup;
+    if (data.settings.hotkey && !hasCustomLookup) {
+      existingHotkeys.lookup = data.settings.hotkey;
+    }
+    data.settings.hotkeys = { ...defaultHotkeys, ...existingHotkeys };
+    // Remove old single hotkey fields
+    delete data.settings.hotkey;
     delete data.settings.hotkeyDoubleCopyMs;
 
     if (!data.settings.targetLanguage) {
@@ -92,7 +98,7 @@ function joinApiPath(base, apiPath) {
 
 function buildCacheKey(text, isPhrase, targetLang, endpoint, model) {
   const normalized = text.toLowerCase().trim();
-  const raw = `${normalized}|${isPhrase}|${targetLang}|${endpoint}|${model}|pv1`;
+  const raw = `${normalized}|${isPhrase}|${targetLang}|${endpoint}|${model}|pv2`;
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16);
 }
 
@@ -332,7 +338,7 @@ Respond ONLY with valid JSON, no markdown:
       systemPrompt = `You are a dictionary and translation assistant.
 Given a word or short phrase, provide:
 1. A clear, concise definition (2-3 sentences). If the word has a specialized meaning in any field (tech, science, medicine, law, business, etc.), mention it.
-2. ${lang} translation of the meaning.
+2. "translatedMeaning": A short, natural ${lang} equivalent for the word. Keep it concise (usually 1-8 words). Do not write a full explanatory sentence here; put explanations only in "definition".
 3. 3-5 related terms (single words or short phrases).
 4. A topic/category tag that best fits (e.g., "Technology", "Medicine", "Law", "Business", "Science", "Mathematics", "Daily Life", "Education", etc.). Use "General" if it's a common everyday word.
 
@@ -531,11 +537,11 @@ function setupIPC() {
     // ── Related words ──
     const relatedWords = settings.showRelatedWords !== false
       ? findRelatedWords(
-          word,
-          aiResult.success ? aiResult.topic : '',
-          aiResult.success ? aiResult.relatedTerms : [],
-          db.words
-        )
+        word,
+        aiResult.success ? aiResult.topic : '',
+        aiResult.success ? aiResult.relatedTerms : [],
+        db.words
+      )
       : [];
 
     // ── Lookup History (always saved) ──
@@ -691,9 +697,9 @@ function setupIPC() {
       success: result.success,
       latencyMs: result.latencyMs,
       errorType: result.statusCode === 401 ? 'auth'
-               : result.statusCode === 429 ? 'rateLimit'
-               : result.error?.includes('timed out') ? 'timeout'
-               : result.error ? 'other' : null,
+        : result.statusCode === 429 ? 'rateLimit'
+          : result.error?.includes('timed out') ? 'timeout'
+            : result.error ? 'other' : null,
       error: result.error || null,
     };
   });
@@ -754,8 +760,13 @@ function setupIPC() {
 
   // ── Shell ──
   ipcMain.handle('shell:openExternal', (event, url) => {
-    // Only allow http/https URLs
-    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+    // Whitelist: only allow known safe URLs
+    const allowed = [
+      'https://openrouter.ai/',
+      'https://platform.openai.com/',
+      'https://console.groq.com/',
+    ];
+    if (typeof url === 'string' && allowed.some((prefix) => url.startsWith(prefix))) {
       const { shell } = require('electron');
       return shell.openExternal(url);
     }
@@ -765,6 +776,12 @@ function setupIPC() {
   // ── Window Controls ──
   ipcMain.on('overlay:hide', () => {
     if (overlayWindow) overlayWindow.hide();
+  });
+
+  ipcMain.on('overlay:show', (event, word) => {
+    if (typeof word === 'string' && word.trim()) {
+      showOverlay(word.trim());
+    }
   });
 
   ipcMain.on('overlay:resize', (event, height) => {
@@ -918,7 +935,7 @@ function showDashboard() {
     minWidth: 800,
     minHeight: 600,
     title: 'EngiLink Dictionary',
-    icon: path.join(__dirname, 'assets', 'icon.png'),
+    icon: path.join(__dirname, 'assets', 'tray-icon.ico'),
     backgroundColor: '#FFF9F0',
     webPreferences: {
       preload: path.join(__dirname, 'preload-dashboard.js'),
@@ -947,13 +964,13 @@ function showDashboard() {
    ══════════════════════════════════════════════ */
 
 function createTray() {
-  // Create a simple 16x16 tray icon programmatically
-  const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAh5JREFUWEftlr1OwzAQx/+XtKUMSEhILIgNiQGJgYkH4A14Ap6AN+AJeAKeAIkBiYUBsaBKSHxMpS2J7TvZTty4cZyUjnTq3f1+d+e7mDDmh8ecHwMAVwFXAW4FqNF/V/4MrP4bJn+FqqoFGNSiqAD/A+Bm4vr+MEmS75BSWcU4PuB2cnz1fOcHgOvA3IMDPiCAbp6k1xLgjNgJRD4gm1tzpwrcFuB8/OxmQlE9yVkslmFRkCBBiqtTi0+enj00nUH7wlP1h6WU/K7VChFMnfY99p2dxqt/Dz9TwHuArE2IzWxbEX0RBwHOBcpHsVKeCp8r0JEdArA/v7a3T0J/xr9vdrdqK7Kxzvy6wBjIlAPDqb5hqw7cRF5/p2YnoX2l3pJl4KD7T3oLsGYLoG88oBxQxU+4FIm+geQ1Y7EX0Gijhqs+x/wGWGn6KSFcV2Y8D5FqVdNHXQHlhZp5VBhIFtmj+r5YVT/SOnmjVaVnKIH2O9AxGahSB9UVwjU9hW6AQWKZM8LMlFPVxr9Ik9vu9Bqx1q73sCVWf4dECwGnAQSBqYOnvpdvOd4WVUVPUZvt++lw3bH9tITiqJXtI8v/A3VZtDLjqTFb9U2NW7A6EvKxLf8XjC9s8j5sZFdSJ2KeBkBlR34EAEn+Y7r1R+rrj/AXAVqPM+rVkBbvYryBxs7jX6jwvwwkEJfSl0FXgDVjy0IK+k/kIAAAAASUVORK5CYII='
-  );
+  // Use user-provided .ico for crisp Windows tray icon
+  const iconPath = path.join(__dirname, 'assets', 'tray-icon.ico');
+  const icon = nativeImage.createFromPath(iconPath);
+
 
   tray = new Tray(icon);
-  tray.setToolTip('EngiLink Dictionary — Ctrl+Shift+Z to lookup');
+  tray.setToolTip('EngiLink Dictionary');
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -1139,7 +1156,7 @@ ipcMain.handle('hotkeys:update', (event, newHotkeys) => {
 
   // 2. Unregister old EngiLink hotkeys
   for (const accel of Object.values(oldHotkeys)) {
-    try { globalShortcut.unregister(accel); } catch {}
+    try { globalShortcut.unregister(accel); } catch { }
   }
 
   // 3. Try register new
@@ -1150,7 +1167,7 @@ ipcMain.handle('hotkeys:update', (event, newHotkeys) => {
     // 4. Rollback: unregister any new that succeeded, re-register old
     for (const [name, ok] of Object.entries(results)) {
       if (ok) {
-        try { globalShortcut.unregister(newHotkeys[name]); } catch {}
+        try { globalShortcut.unregister(newHotkeys[name]); } catch { }
       }
     }
     registerAllHotkeys(oldHotkeys);
@@ -1200,6 +1217,11 @@ app.whenReady().then(() => {
     setTimeout(() => {
       if (dashboardWindow) dashboardWindow.webContents.send('navigate', 'settings');
     }, 1000);
+  }
+  if (tray && hkResults.lookup) {
+    tray.setToolTip(`EngiLink Dictionary - ${currentHotkeys.lookup || DEFAULT_DATA.settings.hotkeys.lookup} to lookup`);
+  } else if (tray) {
+    tray.setToolTip('EngiLink Dictionary - lookup hotkey not registered');
   }
 
   // Prune stale cache on startup

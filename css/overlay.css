@@ -52,6 +52,7 @@ html, body {
   font-family: var(--font);
   font-size: 13px;
   color: var(--text-primary);
+  height: 100vh;
   overflow: hidden;
   user-select: none;
   -webkit-app-region: no-drag;
@@ -66,10 +67,26 @@ html, body {
     4px 4px 0px var(--border-sketch),
     0 8px 24px rgba(74, 55, 40, 0.15);
   animation: overlayBounce 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: block;
   position: relative;
+  height: 100vh;
+  max-height: 100vh;
+}
+
+.overlay-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.overlay-container::-webkit-scrollbar-track {
+  background: rgba(255, 232, 208, 0.75);
+  border-radius: 8px;
+}
+
+.overlay-container::-webkit-scrollbar-thumb {
+  background: var(--border-sketch);
+  border-radius: 8px;
 }
 
 /* Decorative corner doodle */
@@ -282,23 +299,7 @@ html, body {
 
 /* ── Tab Content ── */
 .tab-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.tab-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.tab-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tab-content::-webkit-scrollbar-thumb {
-  background: var(--border-primary);
-  border-radius: 3px;
+  overflow: visible;
 }
 
 .tab-panel {

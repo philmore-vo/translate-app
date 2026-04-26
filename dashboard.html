@@ -12,7 +12,7 @@
     <nav class="sidebar" id="sidebar">
       <div class="sidebar-brand">
         <div class="brand-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+          <img src="assets/tray-icon.ico" alt="EngiLink" width="28" height="28" style="border-radius:6px;">
         </div>
         <div class="brand-text">
           <span class="brand-name">EngiLink</span>
@@ -119,12 +119,14 @@
             <div class="flashcard-front" id="flashcard-front">
               <div class="fc-word" id="fc-word"></div>
               <div class="fc-phonetic" id="fc-phonetic"></div>
+              <button class="fc-audio-btn" id="btn-study-audio" type="button" title="Play pronunciation">🔊</button>
               <div class="fc-hint">Click to reveal</div>
             </div>
             <div class="flashcard-back" id="flashcard-back" style="display:none;">
               <div class="fc-definition" id="fc-definition"></div>
               <div class="fc-tech" id="fc-tech"></div>
               <div class="fc-vn" id="fc-vn"></div>
+              <div class="fc-related" id="fc-related"></div>
             </div>
           </div>
           <div class="flashcard-actions" id="flashcard-actions" style="display:none;">

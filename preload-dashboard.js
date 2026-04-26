@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('eld', {
   // Shell
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
+  // Overlay
+  showOverlay: (word) => ipcRenderer.send('overlay:show', word),
+
   // Events
   onNavigate: (callback) => {
     ipcRenderer.on('navigate', (event, page) => callback(page));

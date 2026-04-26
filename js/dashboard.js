@@ -148,7 +148,13 @@
 
       // Attach click handlers
       grid.querySelectorAll('.word-card').forEach((card) => {
-        card.addEventListener('click', () => {
+        card.addEventListener('click', (e) => {
+          const audioBtn = e.target.closest('.wc-audio-btn');
+          if (audioBtn) {
+            e.stopPropagation();
+            playPronunciation(audioBtn.dataset.word, audioBtn.dataset.audio);
+            return;
+          }
           const wordId = card.dataset.id;
           const word = allWords.find((w) => w.id === wordId);
           if (word) showWordDetail(word);
@@ -169,7 +175,10 @@
             <div class="wc-word">${escHtml(w.word)}</div>
             ${w.phonetic ? `<div class="wc-phonetic">${escHtml(w.phonetic)}</div>` : ''}
           </div>
-          ${w.isFavorite ? '<span class="wc-fav">⭐</span>' : ''}
+          <div class="wc-actions">
+            <button class="wc-audio-btn" data-word="${escAttr(w.word)}" data-audio="${escAttr(w.audioUrl || '')}" type="button" title="Play pronunciation">🔊</button>
+            ${w.isFavorite ? '<span class="wc-fav">⭐</span>' : ''}
+          </div>
         </div>
         ${(w.translatedMeaning || w.vietnameseMeaning) ? `<div class="wc-vn">🌐 ${escHtml(w.translatedMeaning || w.vietnameseMeaning)}</div>` : ''}
         <div class="wc-definition">${escHtml(def)}</div>
@@ -195,6 +204,13 @@
         $('#word-detail-modal').style.display = 'none';
       }
     });
+
+    $('#modal-body').addEventListener('click', (e) => {
+      const chip = e.target.closest('.md-related-chip');
+      if (!chip || !chip.dataset.word) return;
+      $('#word-detail-modal').style.display = 'none';
+      window.eld.showOverlay(chip.dataset.word);
+    });
   }
 
   function showWordDetail(w) {
@@ -212,9 +228,18 @@
       }
     }
 
+    const relatedTerms = getRelatedTerms(w);
+
     body.innerHTML = `
-      <div class="md-word">${escHtml(w.word)}</div>
-      ${w.phonetic ? `<div class="md-phonetic">${escHtml(w.phonetic)}</div>` : ''}
+      <div class="md-header-row">
+        <div>
+          <div class="md-word">${escHtml(w.word)}</div>
+          ${w.phonetic ? `<div class="md-phonetic">${escHtml(w.phonetic)}</div>` : ''}
+        </div>
+        <button class="btn-audio-inline" id="modal-btn-audio" data-word="${escAttr(w.word)}" data-audio="${escAttr(w.audioUrl || '')}" title="Pronounce">
+          🔊
+        </button>
+      </div>
       ${(w.translatedMeaning || w.vietnameseMeaning) ? `<div class="md-vn">🌐 ${escHtml(w.translatedMeaning || w.vietnameseMeaning)}</div>` : ''}
 
       ${meaningsHtml ? `
@@ -233,9 +258,9 @@
 
       ${w.topic ? `<div class="md-topic"># ${escHtml(w.topic)}</div>` : ''}
 
-      ${w.tags && w.tags.length > 0 ? `
+      ${relatedTerms.length > 0 ? `
         <div class="md-tags">
-          ${w.tags.map((t) => `<span class="md-tag">${escHtml(t)}</span>`).join('')}
+          ${relatedTerms.map((t) => `<button class="md-tag md-related-chip" data-word="${escAttr(t)}" type="button">${escHtml(t)}</button>`).join('')}
         </div>
       ` : ''}
 
@@ -253,6 +278,9 @@
       </div>
 
       <div class="md-actions">
+        <button class="btn-primary" id="modal-btn-overlay" data-word="${escAttr(w.word)}">
+          🔍 Lookup in Overlay
+        </button>
         <button class="btn-secondary" id="modal-btn-fav" data-id="${escAttr(w.id)}">
           ${w.isFavorite ? '⭐ Unfavorite' : '☆ Favorite'}
         </button>
@@ -263,6 +291,15 @@
     `;
 
     // Attach action handlers
+    $('#modal-btn-overlay').addEventListener('click', () => {
+      $('#word-detail-modal').style.display = 'none';
+      window.eld.showOverlay(w.word);
+    });
+
+    $('#modal-btn-audio').addEventListener('click', () => {
+      playPronunciation(w.word, w.audioUrl);
+    });
+
     $('#modal-btn-fav').addEventListener('click', async () => {
       await window.eld.toggleFavorite(w.id);
       w.isFavorite = !w.isFavorite;
@@ -289,6 +326,15 @@
   function setupStudy() {
     $('#btn-start-study').addEventListener('click', startStudy);
     $('#flashcard').addEventListener('click', revealCard);
+    $('#btn-study-audio').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const card = studyCards[studyIndex];
+      if (card) playPronunciation(card.word, card.audioUrl);
+    });
+    $('#fc-related').addEventListener('click', (e) => {
+      const chip = e.target.closest('.fc-related-chip');
+      if (chip && chip.dataset.word) openOverlayLookup(chip.dataset.word);
+    });
     // SM-2 quality buttons: Again=0, Hard=3, Good=4, Easy=5
     $('#btn-fc-again').addEventListener('click', () => nextCard(0));
     $('#btn-fc-hard').addEventListener('click', () => nextCard(3));
@@ -345,6 +391,10 @@
     $('#fc-tech').textContent = card.technicalNote || '';
     const meaning = card.translatedMeaning || card.vietnameseMeaning || '';
     $('#fc-vn').textContent = meaning ? `🌐 ${meaning}` : '';
+    const relatedTerms = getRelatedTerms(card);
+    $('#fc-related').innerHTML = relatedTerms.length
+      ? `<div class="fc-related-label">Related</div>${relatedTerms.map((term) => `<button class="fc-related-chip" data-word="${escAttr(term)}" type="button">${escHtml(term)}</button>`).join('')}`
+      : '';
 
     $('#flashcard-front').style.display = 'block';
     $('#flashcard-back').style.display = 'none';
@@ -412,7 +462,7 @@
     allWords = await window.eld.getAllWords();
     const recent = [...allWords].sort((a, b) => new Date(b.lastLookup) - new Date(a.lastLookup)).slice(0, 15);
     const recentEl = $('#recent-words');
-    recentEl.innerHTML = recent.map((w) => `<span class="recent-chip">${escHtml(w.word)}</span>`).join('');
+    recentEl.innerHTML = recent.map((w) => `<span class="recent-chip" data-word="${escAttr(w.word)}">${escHtml(w.word)}</span>`).join('');
   }
 
   /* ══════════════════════════════════
@@ -423,63 +473,105 @@
     const input = $('#lookup-input');
     const btn = $('#btn-lookup');
 
-    async function doLookup() {
-      const word = input.value.trim();
-      if (!word) return;
+    btn.addEventListener('click', () => runDashboardLookup(input.value.trim()));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') runDashboardLookup(input.value.trim());
+    });
 
-      $('#lookup-result').style.display = 'none';
-      $('#lookup-loading').style.display = 'flex';
-
-      try {
-        const result = await window.eld.lookupWord(word);
-        renderLookupResult(result, word);
-      } catch (err) {
-        $('#lookup-result').innerHTML = `<p style="color:var(--red);">Lookup failed: ${escHtml(err.message)}</p>`;
-        $('#lookup-result').style.display = 'block';
+    $('#lookup-result').addEventListener('click', (e) => {
+      const audioBtn = e.target.closest('.lr-audio-btn');
+      if (audioBtn) {
+        playPronunciation(audioBtn.dataset.word, audioBtn.dataset.audio);
+        return;
       }
 
-      $('#lookup-loading').style.display = 'none';
-    }
-
-    btn.addEventListener('click', doLookup);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') doLookup();
+      const chip = e.target.closest('.lookup-related-chip');
+      if (chip && chip.dataset.word) runDashboardLookup(chip.dataset.word);
     });
   }
 
+  async function runDashboardLookup(word) {
+    word = (word || '').trim();
+    if (!word) return;
+
+    navigateTo('lookup');
+    $('#lookup-input').value = word;
+    $('#lookup-result').style.display = 'none';
+    $('#lookup-loading').style.display = 'flex';
+
+    try {
+      const result = await window.eld.lookupWord(word);
+      renderLookupResult(result, word);
+      allWords = await window.eld.getAllWords();
+      renderLibrary();
+      renderStats();
+    } catch (err) {
+      $('#lookup-result').innerHTML = `<p style="color:var(--red);">Lookup failed: ${escHtml(err.message)}</p>`;
+      $('#lookup-result').style.display = 'block';
+    } finally {
+      $('#lookup-loading').style.display = 'none';
+    }
+  }
+
   function renderLookupResult(result, word) {
-    const { dictionary, ai } = result;
+    const { dictionary, ai, relatedWords, isPhrase, usedCache } = result;
     const el = $('#lookup-result');
 
-    let html = `<div class="lr-word">${escHtml(word)}</div>`;
+    const phonetic = dictionary && dictionary.success ? dictionary.phonetic : '';
+    const audioUrl = dictionary && dictionary.success ? dictionary.audioUrl : '';
+    const translated = ai && ai.success ? (ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '') : '';
+    const relatedTerms = [
+      ...getRelatedTerms({ tags: ai && ai.success ? ai.relatedTerms : [] }),
+      ...((relatedWords || []).map((w) => w.word)),
+    ].filter(Boolean);
+    const uniqueRelated = [...new Set(relatedTerms.map((t) => String(t).trim()).filter(Boolean))].slice(0, 10);
 
-    if (dictionary && dictionary.success) {
-      if (dictionary.phonetic) html += `<div class="lr-phonetic">${escHtml(dictionary.phonetic)}</div>`;
+    let html = `
+      <div class="lr-header">
+        <div>
+          <div class="lr-word">${escHtml(word)}</div>
+          ${phonetic ? `<div class="lr-phonetic">${escHtml(phonetic)}</div>` : ''}
+        </div>
+        <button class="lr-audio-btn" data-word="${escAttr(word)}" data-audio="${escAttr(audioUrl || '')}" type="button" title="Play pronunciation">🔊</button>
+      </div>
+    `;
 
-      html += '<div class="lr-section"><div class="lr-section-title">📖 Dictionary</div>';
+    if (translated) {
+      html += `<div class="lr-vn">🌐 ${escHtml(translated)}</div>`;
+    }
+
+    if (ai && ai.success && ai.definition) {
+      html += `<div class="lr-section"><div class="lr-section-title">Explanation</div>`;
+      html += `<div class="lr-tech">${escHtml(ai.definition)}</div></div>`;
+    }
+
+    if (isPhrase && translated) {
+      html += `<div class="lr-section"><div class="lr-section-title">Translation</div><div class="lr-def">${escHtml(translated)}</div></div>`;
+    } else if (dictionary && dictionary.success) {
+      html += '<div class="lr-section"><div class="lr-section-title">Dictionary</div>';
       for (const m of (dictionary.meanings || [])) {
+        if (m.partOfSpeech) html += `<div class="lr-pos">${escHtml(m.partOfSpeech)}</div>`;
         for (const d of (m.definitions || [])) {
           html += `<div class="lr-def">${escHtml(d.definition)}</div>`;
+          if (d.example) html += `<div class="lr-example">"${escHtml(d.example)}"</div>`;
+        }
+        const synonyms = (m.synonyms || []).slice(0, 8);
+        if (synonyms.length) {
+          html += `<div class="lr-chip-row">${synonyms.map((s) => `<button class="lookup-related-chip" data-word="${escAttr(s)}" type="button">${escHtml(s)}</button>`).join('')}</div>`;
         }
       }
       html += '</div>';
     }
 
-    if (ai && ai.success) {
-      const tm = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
-      if (tm) html += `<div class="lr-vn">🌐 ${escHtml(tm)}</div>`;
-      if (ai.definition) {
-        html += `<div class="lr-section"><div class="lr-section-title">🔧 Technical Note</div>`;
-        html += `<div class="lr-tech">${escHtml(ai.definition)}</div></div>`;
-      }
-      if (ai.topic) html += `<div class="lr-topic"># ${escHtml(ai.topic)}</div>`;
+    if (uniqueRelated.length) {
+      html += `<div class="lr-section"><div class="lr-section-title">Related</div><div class="lr-chip-row">${uniqueRelated.map((term) => `<button class="lookup-related-chip" data-word="${escAttr(term)}" type="button">${escHtml(term)}</button>`).join('')}</div></div>`;
     }
+
+    if (ai && ai.success && ai.topic) html += `<div class="lr-topic"># ${escHtml(ai.topic)}</div>`;
+    if (usedCache) html += `<div class="lr-cache">From offline cache</div>`;
 
     el.innerHTML = html;
     el.style.display = 'block';
-
-    // Refresh library if on that page
-    renderLibrary();
   }
 
   /* ══════════════════════════════════
@@ -660,6 +752,38 @@
      HELPERS
      ══════════════════════════════════ */
 
+  function getRelatedTerms(word) {
+    const raw = [
+      ...(word.relatedTerms || []),
+      ...(word.tags || []),
+    ];
+    return [...new Set(raw.map((t) => String(t).trim()).filter(Boolean))].slice(0, 12);
+  }
+
+  function playPronunciation(word, audioUrl) {
+    if (audioUrl) {
+      const audio = new Audio(audioUrl);
+      audio.play().catch(() => speakWord(word));
+      return;
+    }
+    speakWord(word);
+  }
+
+  function speakWord(word) {
+    if (!word || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.9;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function openOverlayLookup(word) {
+    word = (word || '').trim();
+    if (!word) return;
+    window.eld.showOverlay(word);
+  }
+
   function escHtml(str) {
     if (!str) return '';
     const div = document.createElement('div');
@@ -734,12 +858,21 @@
       for (const item of items.reverse()) {
         const time = new Date(item.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         const cached = item.cached ? ' 💾' : '';
-        html += `<span class="recent-chip" title="${time}${cached}">${escHtml(item.word)}</span>`;
+        html += `<span class="recent-chip" data-word="${escAttr(item.word)}" title="${time}${cached}">${escHtml(item.word)}</span>`;
       }
       html += `</div></div>`;
     }
     timeline.innerHTML = html;
   }
+
+  // ── Global chip → overlay handler ──
+  document.addEventListener('click', (e) => {
+    const chip = e.target.closest('.recent-chip[data-word]');
+    if (chip && chip.dataset.word) {
+      e.stopPropagation();
+      window.eld.showOverlay(chip.dataset.word);
+    }
+  });
 
   // ── Start ──
   document.addEventListener('DOMContentLoaded', init);

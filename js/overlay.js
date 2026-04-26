@@ -42,7 +42,6 @@
   const btnNoteCancel = $('#btn-note-cancel');
   const audioPlayer = $('#audio-player');
 
-  let currentWordData = null;
   let currentWordId = null;
   let currentFullText = null; // full text for TTS (not truncated)
 
@@ -89,7 +88,7 @@
 
     // Dictionary (or Translation for phrases)
     if (isPhrase && ai && ai.success) {
-      // Show Vietnamese translation in dictionary panel
+      // Show translation in dictionary panel
       dictLoader.style.display = 'none';
       dictError.style.display = 'none';
       defList.innerHTML = '';
@@ -115,7 +114,7 @@
     if (ai && ai.success) {
       renderTechNote(ai);
 
-      // Show Vietnamese meaning in header (for ALL lookups)
+      // Show translated meaning in header (for ALL lookups)
       const vnText = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
       if (vnText) {
         vnMeaningText.textContent = vnText;
@@ -254,9 +253,9 @@
   }
 
   function resetUI() {
-    currentWordData = null;
     currentWordId = null;
     currentFullText = null;
+    document.getElementById('overlay-root').scrollTop = 0;
 
     wordText.textContent = '—';
     wordText.title = '';
@@ -302,6 +301,7 @@
     tabBar.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
     panelDict.classList.toggle('active', tabName === 'dictionary');
     panelTech.classList.toggle('active', tabName === 'technical');
+    document.getElementById('overlay-root').scrollTop = 0;
 
     requestAnimationFrame(() => {
       const height = document.getElementById('overlay-root').scrollHeight;
@@ -407,6 +407,7 @@
     if (chip && chip.dataset.word) {
       resetUI();
       const word = chip.dataset.word;
+      currentFullText = word;
       wordText.textContent = word;
       window.eld.lookupWord(word).then((res) => {
         renderResult(res, word);
