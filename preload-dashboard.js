@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('eld', {
   deleteWord: (id) => ipcRenderer.invoke('words:delete', id),
   updateWord: (word) => ipcRenderer.invoke('words:update', word),
   toggleFavorite: (id) => ipcRenderer.invoke('words:toggleFavorite', id),
+  updateNote: (id, note) => ipcRenderer.invoke('words:updateNote', id, note),
+  batchDelete: (ids) => ipcRenderer.invoke('words:batchDelete', ids),
   lookupWord: (word, options) => ipcRenderer.invoke('lookup:word', word, options),
 
   // Stats

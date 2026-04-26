@@ -14,9 +14,9 @@ const DB_DIR = path.join(app.getPath('userData'), 'engilink-db');
 const DB_FILE = path.join(DB_DIR, 'data.json');
 const DB_BACKUP = path.join(DB_DIR, 'data.backup.json');
 
-// ── Default data structure (V2) ──
+// ── Default data structure (V3) ──
 const DEFAULT_DATA = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   words: [],
   lookupHistory: [],
   aiCache: {},
@@ -31,7 +31,7 @@ const DEFAULT_DATA = {
     },
     overlayWidth: 380,
     overlayMaxHeight: 520,
-    theme: 'playful',
+    theme: 'light',
     autoSave: true,
     showRelatedWords: true,
   },
@@ -86,6 +86,16 @@ function migrateDatabase(data) {
     data.schemaVersion = 2;
     changed = true;
     console.log('📦 Migrated database to schema v2');
+  }
+
+  // ── V2 → V3 ──
+  if (version < 3) {
+    if (!data.settings.theme || data.settings.theme === 'playful') {
+      data.settings.theme = 'light';
+    }
+    data.schemaVersion = 3;
+    changed = true;
+    console.log('📦 Migrated database to schema v3');
   }
 
   return { data, changed };
@@ -660,6 +670,26 @@ function setupIPC() {
       return db.words[idx].isFavorite;
     }
     return false;
+  });
+
+  ipcMain.handle('words:updateNote', (event, wordId, note) => {
+    const db = loadDatabase();
+    const idx = db.words.findIndex((w) => w.id === wordId);
+    if (idx >= 0) {
+      db.words[idx].userNote = note || '';
+      saveDatabase(db);
+      return true;
+    }
+    return false;
+  });
+
+  ipcMain.handle('words:batchDelete', (event, wordIds) => {
+    if (!Array.isArray(wordIds) || wordIds.length === 0) return 0;
+    const db = loadDatabase();
+    const before = db.words.length;
+    db.words = db.words.filter((w) => !wordIds.includes(w.id));
+    saveDatabase(db);
+    return before - db.words.length;
   });
 
   // ── Stats ──

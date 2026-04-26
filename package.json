@@ -1,6 +1,6 @@
 {
   "name": "engilink-dictionary",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "EngiLink Dictionary — AI-powered multilingual translation assistant with SRS",
   "main": "main.js",
   "scripts": {

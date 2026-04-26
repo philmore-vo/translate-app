@@ -15,6 +15,8 @@
   let studyCards = [];
   let studyIndex = 0;
   let studyRevealed = false;
+  let selectMode = false;
+  let selectedIds = new Set();
 
   /* ══════════════════════════════════
      INITIALIZATION
@@ -24,6 +26,9 @@
     settings = await window.eld.getSettings();
     allWords = await window.eld.getAllWords();
 
+    // Apply theme immediately
+    applyTheme(settings.theme || 'light');
+
     setupNavigation();
     setupSettings();
     setupLibrary();
@@ -32,9 +37,11 @@
     setupModal();
     setupDataManagement();
     setupHistory();
+    setupBatchSelection();
 
     renderLibrary();
     renderStats();
+    renderHeatmap();
 
     // Listen for navigation from main process (e.g., tray → settings)
     window.eld.onNavigate((page) => navigateTo(page));
@@ -43,6 +50,10 @@
     if (!settings.apiKey) {
       navigateTo('settings');
     }
+  }
+
+  function applyTheme(theme) {
+    document.body.setAttribute('data-theme', theme);
   }
 
   /* ══════════════════════════════════
@@ -156,6 +167,10 @@
             return;
           }
           const wordId = card.dataset.id;
+          if (selectMode) {
+            toggleSelection(wordId, card);
+            return;
+          }
           const word = allWords.find((w) => w.id === wordId);
           if (word) showWordDetail(word);
         });
@@ -169,7 +184,8 @@
       : (w.technicalNote || 'No definition available');
 
     return `
-      <div class="word-card" data-id="${escAttr(w.id)}">
+      <div class="word-card${selectMode ? ' select-mode' : ''}${selectedIds.has(w.id) ? ' selected' : ''}" data-id="${escAttr(w.id)}">
+        <div class="wc-checkbox"></div>
         <div class="wc-header">
           <div>
             <div class="wc-word">${escHtml(w.word)}</div>
@@ -264,12 +280,10 @@
         </div>
       ` : ''}
 
-      ${w.userNote ? `
-        <div class="md-section" style="margin-top:12px;">
-          <div class="md-section-title">📝 Your Note</div>
-          <div class="md-note">${escHtml(w.userNote)}</div>
-        </div>
-      ` : ''}
+      <div class="md-section" style="margin-top:12px;">
+        <div class="md-section-title">📝 Your Note <span class="md-note-saved" id="note-saved">✓ Saved</span></div>
+        <textarea class="md-note-editor" id="modal-note-editor" data-id="${escAttr(w.id)}" placeholder="Add a personal note, mnemonic, or context...">${escHtml(w.userNote || '')}</textarea>
+      </div>
 
       <div class="md-meta">
         <span>First lookup: ${formatDate(w.firstLookup)}</span>
@@ -315,6 +329,23 @@
         renderStats();
       }
     });
+
+    // Note editor auto-save
+    const noteEditor = $('#modal-note-editor');
+    if (noteEditor) {
+      let saveTimeout;
+      noteEditor.addEventListener('input', () => {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(async () => {
+          await window.eld.updateNote(noteEditor.dataset.id, noteEditor.value);
+          // Update local state
+          const wLocal = allWords.find((x) => x.id === noteEditor.dataset.id);
+          if (wLocal) wLocal.userNote = noteEditor.value;
+          const saved = $('#note-saved');
+          if (saved) { saved.classList.add('show'); setTimeout(() => saved.classList.remove('show'), 1500); }
+        }, 600);
+      });
+    }
 
     $('#word-detail-modal').style.display = 'flex';
   }
@@ -595,6 +626,7 @@
         targetLanguage: $('#setting-language').value,
         autoSave: $('#setting-autosave').checked,
         showRelatedWords: $('#setting-related').checked,
+        theme: $('#setting-theme-dark').checked ? 'dark' : 'light',
       };
 
       // Update hotkeys transactionally first
@@ -618,6 +650,7 @@
 
       const ok = await window.eld.saveSettings(newSettings);
       settings = await window.eld.getSettings();
+      applyTheme(settings.theme || 'light');
 
       const status = $('#save-status');
       status.textContent = ok ? '✓ Settings saved!' : '✗ Failed to save';
@@ -691,6 +724,13 @@
       $('#setting-hotkey-lookup').value = settings.hotkeys.lookup || 'CommandOrControl+Shift+Z';
       $('#setting-hotkey-spotlight').value = settings.hotkeys.spotlight || 'CommandOrControl+Shift+Space';
     }
+    // Theme
+    $('#setting-theme-dark').checked = settings.theme === 'dark';
+
+    // Live theme toggle
+    $('#setting-theme-dark').addEventListener('change', (e) => {
+      applyTheme(e.target.checked ? 'dark' : 'light');
+    });
   }
 
   /* ══════════════════════════════════
@@ -746,6 +786,112 @@
         }
       }
     });
+  }
+
+  /* ══════════════════════════════════
+     ACTIVITY HEATMAP (3 months)
+     ══════════════════════════════════ */
+
+  async function renderHeatmap() {
+    const grid = $('#heatmap-grid');
+    if (!grid) return;
+
+    const history = await window.eld.getHistory();
+    const today = new Date();
+    const days = 91; // ~3 months
+
+    // Count lookups per day
+    const counts = {};
+    for (const entry of history) {
+      const date = new Date(entry.timestamp || entry.date || 0);
+      const key = date.toISOString().split('T')[0];
+      counts[key] = (counts[key] || 0) + 1;
+    }
+
+    // Find max for scaling
+    const values = Object.values(counts);
+    const maxCount = Math.max(1, ...values);
+
+    let html = '';
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split('T')[0];
+      const count = counts[key] || 0;
+      let level = 0;
+      if (count > 0) level = Math.min(4, Math.ceil((count / maxCount) * 4));
+      const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      html += `<div class="heatmap-cell" data-level="${level}" title="${dateStr}: ${count} lookups"></div>`;
+    }
+    grid.innerHTML = html;
+  }
+
+  /* ══════════════════════════════════
+     BATCH SELECTION
+     ══════════════════════════════════ */
+
+  function setupBatchSelection() {
+    const btnSelect = $('#btn-select-mode');
+    const toolbar = $('#batch-toolbar');
+    if (!btnSelect || !toolbar) return;
+
+    btnSelect.addEventListener('click', () => {
+      selectMode = !selectMode;
+      selectedIds.clear();
+      btnSelect.textContent = selectMode ? '✕ Cancel' : '☑ Select';
+      toolbar.classList.toggle('active', selectMode);
+      updateBatchCount();
+      renderLibrary();
+    });
+
+    $('#batch-cancel').addEventListener('click', () => {
+      selectMode = false;
+      selectedIds.clear();
+      btnSelect.textContent = '☑ Select';
+      toolbar.classList.remove('active');
+      renderLibrary();
+    });
+
+    $('#batch-delete').addEventListener('click', async () => {
+      if (selectedIds.size === 0) return;
+      if (!confirm(`Delete ${selectedIds.size} selected word(s)?`)) return;
+      const deleted = await window.eld.batchDelete([...selectedIds]);
+      selectedIds.clear();
+      selectMode = false;
+      btnSelect.textContent = '☑ Select';
+      toolbar.classList.remove('active');
+      allWords = await window.eld.getAllWords();
+      renderLibrary();
+      renderStats();
+    });
+
+    $('#batch-export').addEventListener('click', async () => {
+      if (selectedIds.size === 0) return;
+      const selected = allWords.filter((w) => selectedIds.has(w.id));
+      const blob = new Blob([JSON.stringify(selected, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `engilink-export-${selectedIds.size}words-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  function toggleSelection(wordId, card) {
+    if (selectedIds.has(wordId)) {
+      selectedIds.delete(wordId);
+      card.classList.remove('selected');
+    } else {
+      selectedIds.add(wordId);
+      card.classList.add('selected');
+    }
+    updateBatchCount();
+  }
+
+  function updateBatchCount() {
+    const el = $('#batch-count');
+    if (el) el.textContent = `${selectedIds.size} selected`;
   }
 
   /* ══════════════════════════════════

@@ -47,6 +47,22 @@
   --font-mono: 'Patrick Hand', monospace;
 }
 
+[data-theme="dark"] {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-hover: #1f2b47;
+  --bg-active: #253350;
+  --border-primary: #2d3f5e;
+  --border-sketch: #3a5070;
+  --border-dashed: dashed 2px #3a5070;
+  --text-primary: #e4e4f0;
+  --text-secondary: #a8a8c0;
+  --text-muted: #6c6c8a;
+  --accent-primary: #FF6B6B;
+  --accent-secondary: #FF8E8E;
+  --accent-glow: rgba(255, 107, 107, 0.15);
+}
+
 html, body {
   background: transparent;
   font-family: var(--font);

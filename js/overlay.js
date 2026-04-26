@@ -47,6 +47,12 @@
 
   // ── Listen for lookup from main process ──
   window.eld.onLookupStart(async (word) => {
+    // Apply theme
+    try {
+      const s = await window.eld.getSettings();
+      document.body.setAttribute('data-theme', s.theme || 'light');
+    } catch (_) { /* ignore */ }
+
     resetUI();
     currentFullText = word;
     wordText.textContent = word;

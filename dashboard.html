@@ -72,7 +72,15 @@
               <option value="frequency">Most Looked Up</option>
               <option value="favorites">Favorites First</option>
             </select>
+            <button class="btn-secondary" id="btn-select-mode" title="Select multiple">☑ Select</button>
           </div>
+        </div>
+
+        <div class="batch-toolbar" id="batch-toolbar">
+          <span class="batch-count" id="batch-count">0 selected</span>
+          <button id="batch-delete">🗑 Delete</button>
+          <button id="batch-export">📤 Export</button>
+          <button id="batch-cancel">✕ Cancel</button>
         </div>
 
         <div class="word-grid" id="word-grid">
@@ -186,6 +194,22 @@
           <h2 class="section-title">Recently Looked Up</h2>
           <div class="recent-words" id="recent-words">
             <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <div class="stats-section">
+          <div class="heatmap-container" id="heatmap-container">
+            <div class="heatmap-title">📊 Activity (Last 3 Months)</div>
+            <div class="heatmap-grid" id="heatmap-grid"></div>
+            <div class="heatmap-legend">
+              <span>Less</span>
+              <span class="heatmap-legend-cell" style="background:var(--bg-elevated)"></span>
+              <span class="heatmap-legend-cell" data-level="1" style="background:rgba(255,107,107,0.25)"></span>
+              <span class="heatmap-legend-cell" data-level="2" style="background:rgba(255,107,107,0.5)"></span>
+              <span class="heatmap-legend-cell" data-level="3" style="background:rgba(255,107,107,0.75)"></span>
+              <span class="heatmap-legend-cell" data-level="4" style="background:var(--accent)"></span>
+              <span>More</span>
+            </div>
           </div>
         </div>
       </section>
@@ -331,6 +355,20 @@
                 <input type="checkbox" id="setting-related" checked>
                 <span class="toggle-slider"></span>
               </label>
+            </div>
+            <div class="setting-row">
+              <label class="setting-label">
+                <span>Dark Mode</span>
+                <span class="setting-desc">Switch between light and dark theme</span>
+              </label>
+              <div class="theme-toggle">
+                <span class="theme-toggle-label">☀️</span>
+                <label class="theme-switch">
+                  <input type="checkbox" id="setting-theme-dark">
+                  <span class="theme-slider"></span>
+                </label>
+                <span class="theme-toggle-label">🌙</span>
+              </div>
             </div>
           </div>
 
