@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('eld', {
   deleteWord: (id) => ipcRenderer.invoke('words:delete', id),
   updateWord: (word) => ipcRenderer.invoke('words:update', word),
   toggleFavorite: (id) => ipcRenderer.invoke('words:toggleFavorite', id),
-  lookupWord: (word) => ipcRenderer.invoke('lookup:word', word),
+  lookupWord: (word, options) => ipcRenderer.invoke('lookup:word', word, options),
 
   // Stats
   getStats: () => ipcRenderer.invoke('stats:get'),
@@ -26,6 +26,23 @@ contextBridge.exposeInMainWorld('eld', {
   // Settings
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
+
+  // AI Test
+  testAI: (settings) => ipcRenderer.invoke('ai:testConnection', settings),
+
+  // History
+  getHistory: () => ipcRenderer.invoke('history:get'),
+  clearHistory: () => ipcRenderer.invoke('history:clear'),
+
+  // SRS Study
+  getDueCards: () => ipcRenderer.invoke('study:getDueCards'),
+  reviewCard: (wordId, quality) => ipcRenderer.invoke('study:reviewCard', wordId, quality),
+
+  // Cache
+  pruneCache: () => ipcRenderer.invoke('cache:prune'),
+
+  // Hotkeys
+  updateHotkeys: (hotkeys) => ipcRenderer.invoke('hotkeys:update', hotkeys),
 
   // Shell
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),

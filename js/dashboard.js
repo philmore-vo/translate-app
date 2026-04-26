@@ -31,6 +31,7 @@
     setupLookup();
     setupModal();
     setupDataManagement();
+    setupHistory();
 
     renderLibrary();
     renderStats();
@@ -72,6 +73,7 @@
     if (page === 'library') renderLibrary();
     if (page === 'stats') renderStats();
     if (page === 'study') resetStudy();
+    if (page === 'history') renderHistory();
   }
 
   /* ══════════════════════════════════
@@ -287,9 +289,10 @@
   function setupStudy() {
     $('#btn-start-study').addEventListener('click', startStudy);
     $('#flashcard').addEventListener('click', revealCard);
-    $('#btn-fc-hard').addEventListener('click', () => nextCard());
-    $('#btn-fc-ok').addEventListener('click', () => nextCard());
-    $('#btn-fc-easy').addEventListener('click', () => nextCard());
+    // SM-2 quality buttons: Again=0, Hard=3, Good=4, Easy=5
+    $('#btn-fc-hard').addEventListener('click', () => nextCard(3));
+    $('#btn-fc-ok').addEventListener('click', () => nextCard(4));
+    $('#btn-fc-easy').addEventListener('click', () => nextCard(5));
     $('#btn-study-again').addEventListener('click', startStudy);
   }
 
@@ -300,26 +303,20 @@
   }
 
   async function startStudy() {
-    allWords = await window.eld.getAllWords();
-    let pool = [...allWords];
+    // Use SRS due cards
+    studyCards = await window.eld.getDueCards();
 
     const topicFilter = $('#study-topic-filter').value;
     if (topicFilter) {
-      pool = pool.filter((w) => w.topic === topicFilter);
+      studyCards = studyCards.filter((w) => w.topic === topicFilter);
     }
 
-    if (pool.length === 0) {
-      alert('No words to study! Look up some words first.');
+    if (studyCards.length === 0) {
+      alert('No cards due for review! Look up some words first or check back later.');
       return;
     }
 
-    // Shuffle
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-
-    studyCards = pool.slice(0, Math.min(20, pool.length));
+    studyCards = studyCards.slice(0, Math.min(20, studyCards.length));
     studyIndex = 0;
     studyRevealed = false;
 
@@ -345,7 +342,8 @@
       : '';
     $('#fc-definition').textContent = def;
     $('#fc-tech').textContent = card.technicalNote || '';
-    $('#fc-vn').textContent = card.vietnameseMeaning ? `🇻🇳 ${card.vietnameseMeaning}` : '';
+    const meaning = card.translatedMeaning || card.vietnameseMeaning || '';
+    $('#fc-vn').textContent = meaning ? `🌐 ${meaning}` : '';
 
     $('#flashcard-front').style.display = 'block';
     $('#flashcard-back').style.display = 'none';
@@ -361,7 +359,13 @@
     $('#flashcard-actions').style.display = 'flex';
   }
 
-  function nextCard() {
+  async function nextCard(quality) {
+    // Submit SM-2 review
+    const card = studyCards[studyIndex];
+    if (card && card.id) {
+      await window.eld.reviewCard(card.id, quality);
+    }
+
     studyIndex++;
     if (studyIndex >= studyCards.length) {
       // Complete
@@ -461,7 +465,8 @@
     }
 
     if (ai && ai.success) {
-      if (ai.vietnameseMeaning) html += `<div class="lr-vn">🇻🇳 ${escHtml(ai.vietnameseMeaning)}</div>`;
+      const tm = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
+      if (tm) html += `<div class="lr-vn">🌐 ${escHtml(tm)}</div>`;
       if (ai.definition) {
         html += `<div class="lr-section"><div class="lr-section-title">🔧 Technical Note</div>`;
         html += `<div class="lr-tech">${escHtml(ai.definition)}</div></div>`;
@@ -483,10 +488,8 @@
   let settingsEventsAttached = false;
 
   function setupSettings() {
-    // Populate current settings values
     populateSettings();
 
-    // Attach event listeners ONCE only
     if (settingsEventsAttached) return;
     settingsEventsAttached = true;
 
@@ -496,9 +499,27 @@
         apiKey: $('#setting-api-key').value.trim(),
         model: $('#setting-model').value,
         apiEndpoint: $('#setting-endpoint').value.trim(),
+        targetLanguage: $('#setting-language').value,
         autoSave: $('#setting-autosave').checked,
         showRelatedWords: $('#setting-related').checked,
       };
+
+      // Update hotkeys transactionally first
+      const hkLookup = $('#setting-hotkey-lookup').value;
+      const hkSpotlight = $('#setting-hotkey-spotlight').value;
+      if (hkLookup && hkSpotlight) {
+        const hkResult = await window.eld.updateHotkeys({ lookup: hkLookup, spotlight: hkSpotlight });
+        const hkStatus = $('#hotkey-status');
+        if (hkResult.success) {
+          newSettings.hotkeys = { lookup: hkLookup, spotlight: hkSpotlight };
+          hkStatus.textContent = '✓ Hotkeys updated';
+          hkStatus.style.color = 'var(--green)';
+        } else {
+          hkStatus.textContent = '✗ ' + hkResult.error;
+          hkStatus.style.color = 'var(--red)';
+        }
+        setTimeout(() => { hkStatus.textContent = ''; }, 4000);
+      }
 
       const ok = await window.eld.saveSettings(newSettings);
       settings = await window.eld.getSettings();
@@ -509,15 +530,57 @@
       setTimeout(() => { status.textContent = ''; }, 3000);
     });
 
+    // Test connection
+    $('#btn-test-connection').addEventListener('click', async () => {
+      const testStatus = $('#test-status');
+      testStatus.textContent = '⏳ Testing...';
+      testStatus.style.color = 'var(--text-muted)';
+      const result = await window.eld.testAI({
+        apiKey: $('#setting-api-key').value.trim(),
+        endpoint: $('#setting-endpoint').value.trim(),
+        model: $('#setting-model').value,
+      });
+      if (result.success) {
+        testStatus.textContent = `✓ Connected (${result.latencyMs}ms)`;
+        testStatus.style.color = 'var(--green)';
+      } else {
+        testStatus.textContent = `✗ ${result.error}`;
+        testStatus.style.color = 'var(--red)';
+      }
+      setTimeout(() => { testStatus.textContent = ''; }, 5000);
+    });
+
+    // Hotkey recorder
+    setupHotkeyRecorder('#setting-hotkey-lookup');
+    setupHotkeyRecorder('#setting-hotkey-spotlight');
+
     // DB path
     window.eld.getDbPath().then((p) => {
       $('#db-path-display').textContent = `Database: ${p}`;
     });
 
-    // Get API key link — use preload's openExternal
+    // Get API key link
     $('#link-get-key').addEventListener('click', (e) => {
       e.preventDefault();
       window.eld.openExternal('https://openrouter.ai/keys');
+    });
+  }
+
+  function setupHotkeyRecorder(selector) {
+    const input = $(selector);
+    input.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      const parts = [];
+      if (e.ctrlKey || e.metaKey) parts.push('CommandOrControl');
+      if (e.altKey) parts.push('Alt');
+      if (e.shiftKey) parts.push('Shift');
+      const key = e.key;
+      if (!['Control', 'Alt', 'Shift', 'Meta'].includes(key)) {
+        parts.push(key.length === 1 ? key.toUpperCase() : key);
+      }
+      if (parts.length > 1) {
+        input.value = parts.join('+');
+      }
     });
   }
 
@@ -525,8 +588,14 @@
     $('#setting-api-key').value = settings.apiKey || '';
     $('#setting-model').value = settings.model || 'google/gemini-2.0-flash-exp:free';
     $('#setting-endpoint').value = settings.apiEndpoint || 'https://openrouter.ai/api/v1';
+    $('#setting-language').value = settings.targetLanguage || 'Vietnamese';
     $('#setting-autosave').checked = settings.autoSave !== false;
     $('#setting-related').checked = settings.showRelatedWords !== false;
+    // Hotkeys
+    if (settings.hotkeys) {
+      $('#setting-hotkey-lookup').value = settings.hotkeys.lookup || 'CommandOrControl+Shift+Z';
+      $('#setting-hotkey-spotlight').value = settings.hotkeys.spotlight || 'CommandOrControl+Shift+Space';
+    }
   }
 
   /* ══════════════════════════════════
@@ -612,6 +681,61 @@
       clearTimeout(timeout);
       timeout = setTimeout(() => fn.apply(this, args), ms);
     };
+  }
+
+  /* ══════════════════════════════════
+     HISTORY
+     ══════════════════════════════════ */
+
+  function setupHistory() {
+    const btn = $('#btn-clear-history');
+    if (btn) {
+      btn.addEventListener('click', async () => {
+        if (confirm('Clear all lookup history?')) {
+          await window.eld.clearHistory();
+          renderHistory();
+        }
+      });
+    }
+  }
+
+  async function renderHistory() {
+    const history = await window.eld.getHistory();
+    const timeline = $('#history-timeline');
+    const empty = $('#history-empty');
+
+    if (!history || history.length === 0) {
+      timeline.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+
+    // Group by local date
+    const groups = {};
+    for (const entry of history) {
+      const d = new Date(entry.timestamp);
+      const key = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(entry);
+    }
+
+    // Render newest first
+    const sortedKeys = Object.keys(groups).reverse();
+    let html = '';
+    for (const dateKey of sortedKeys) {
+      const items = groups[dateKey];
+      html += `<div class="settings-card" style="margin-bottom:16px;">`;
+      html += `<h3 class="settings-card-title">📅 ${escHtml(dateKey)} <span style="font-weight:400;font-size:12px;color:var(--text-muted);">(${items.length} lookups)</span></h3>`;
+      html += `<div style="display:flex;flex-wrap:wrap;gap:8px;">`;
+      for (const item of items.reverse()) {
+        const time = new Date(item.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const cached = item.cached ? ' 💾' : '';
+        html += `<span class="recent-chip" title="${time}${cached}">${escHtml(item.word)}</span>`;
+      }
+      html += `</div></div>`;
+    }
+    timeline.innerHTML = html;
   }
 
   // ── Start ──

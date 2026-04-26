@@ -5,8 +5,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('eld', {
-  // Lookup
-  lookupWord: (word) => ipcRenderer.invoke('lookup:word', word),
+  // Lookup (options: { forceRefresh: bool })
+  lookupWord: (word, options) => ipcRenderer.invoke('lookup:word', word, options),
 
   // Overlay controls
   hideOverlay: () => ipcRenderer.send('overlay:hide'),

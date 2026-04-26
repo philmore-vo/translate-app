@@ -11,6 +11,7 @@
   const phoneticText = $('#phonetic-text');
   const btnAudio = $('#btn-audio');
   const btnFav = $('#btn-fav');
+  const btnRefresh = $('#btn-refresh');
   const btnClose = $('#btn-close');
   const partOfSpeech = $('#part-of-speech');
   const vnMeaningHeader = $('#vn-meaning-header');
@@ -81,7 +82,7 @@
     if (isPhrase) {
       const dictTab = tabBar.querySelector('[data-tab="dictionary"]');
       const techTab = tabBar.querySelector('[data-tab="technical"]');
-      if (dictTab) dictTab.textContent = '🇻🇳 Translation';
+      if (dictTab) dictTab.textContent = '🌐 Translation';
       if (techTab) techTab.textContent = '📝 Explanation';
       partOfSpeech.textContent = 'phrase';
     }
@@ -93,7 +94,7 @@
       dictError.style.display = 'none';
       defList.innerHTML = '';
 
-      const vnTranslation = ai.translation || ai.vietnameseMeaning || '';
+      const vnTranslation = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
       if (vnTranslation) {
         const item = document.createElement('div');
         item.className = 'definition-item';
@@ -115,7 +116,7 @@
       renderTechNote(ai);
 
       // Show Vietnamese meaning in header (for ALL lookups)
-      const vnText = ai.translation || ai.vietnameseMeaning || '';
+      const vnText = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
       if (vnText) {
         vnMeaningText.textContent = vnText;
         vnMeaningHeader.style.display = 'flex';
@@ -129,6 +130,8 @@
       renderRelated(relatedWords);
     }
 
+    // Show refresh button
+    if (btnRefresh) btnRefresh.style.display = 'flex';
 
     // Set word ID for favorites/notes + lookup count
     if (result.savedWordId) {
@@ -263,6 +266,7 @@
     btnAudio.dataset.hasDictAudio = 'false';
     audioPlayer.src = '';
     btnFav.classList.remove('active');
+    if (btnRefresh) btnRefresh.style.display = 'none';
     vnMeaningHeader.style.display = 'none';
     vnMeaningText.textContent = '';
 
@@ -338,6 +342,25 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') window.eld.hideOverlay();
   });
+
+  // ── Refresh (force re-fetch from AI, bypass cache) ──
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', async () => {
+      if (!currentFullText) return;
+      btnRefresh.classList.add('playing');
+      try {
+        const result = await window.eld.lookupWord(currentFullText, { forceRefresh: true });
+        renderResult(result, currentFullText);
+      } catch (err) {
+        console.error('Refresh failed:', err);
+      }
+      btnRefresh.classList.remove('playing');
+      requestAnimationFrame(() => {
+        const height = document.getElementById('overlay-root').scrollHeight;
+        window.eld.resizeOverlay(Math.max(200, height + 2));
+      });
+    });
+  }
 
   // ── Favorite ──
   btnFav.addEventListener('click', async () => {

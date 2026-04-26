@@ -1,0 +1,56 @@
+/* EngiLink Spotlight — Playful Search Bar */
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: transparent;
+  overflow: hidden;
+  height: 100%;
+}
+
+.spotlight-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #FFFFFF;
+  border: 3px dashed #F5C896;
+  border-radius: 20px;
+  padding: 10px 20px;
+  box-shadow: 4px 4px 0px #F5C896, 0 8px 32px rgba(0, 0, 0, 0.15);
+  animation: spotlightIn 0.2s ease;
+  -webkit-app-region: drag;
+}
+
+.spotlight-bar:focus-within {
+  border-color: #FF6B6B;
+  border-style: solid;
+  box-shadow: 4px 4px 0px #FF6B6B, 0 8px 32px rgba(255, 107, 107, 0.2);
+}
+
+.spotlight-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+#spotlight-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-family: 'Nunito', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: #4A3728;
+  background: transparent;
+  -webkit-app-region: no-drag;
+}
+
+#spotlight-input::placeholder {
+  color: #A08878;
+  font-weight: 400;
+}
+
+@keyframes spotlightIn {
+  from { opacity: 0; transform: scale(0.9) translateY(-10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}

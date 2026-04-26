@@ -1,7 +1,7 @@
 {
   "name": "engilink-dictionary",
-  "version": "1.0.0",
-  "description": "EngiLink Dictionary — A specialized language assistant for Computer Engineering students",
+  "version": "2.0.0",
+  "description": "EngiLink Dictionary — AI-powered multilingual translation assistant with SRS",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

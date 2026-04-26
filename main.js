@@ -14,17 +14,24 @@ const DB_DIR = path.join(app.getPath('userData'), 'engilink-db');
 const DB_FILE = path.join(DB_DIR, 'data.json');
 const DB_BACKUP = path.join(DB_DIR, 'data.backup.json');
 
-// ── Default data structure ──
+// ── Default data structure (V2) ──
 const DEFAULT_DATA = {
+  schemaVersion: 2,
   words: [],
+  lookupHistory: [],
+  aiCache: {},
   settings: {
     apiKey: '',
     model: 'google/gemini-2.0-flash-exp:free',
     apiEndpoint: 'https://openrouter.ai/api/v1',
-    hotkeyDoubleCopyMs: 500,
+    targetLanguage: 'Vietnamese',
+    hotkeys: {
+      lookup: 'CommandOrControl+Shift+Z',
+      spotlight: 'CommandOrControl+Shift+Space',
+    },
     overlayWidth: 380,
     overlayMaxHeight: 520,
-    theme: 'dark',
+    theme: 'playful',
     autoSave: true,
     showRelatedWords: true,
   },
@@ -35,6 +42,64 @@ const DEFAULT_DATA = {
     lastActiveDate: '',
   },
 };
+
+// ── Schema migration ──
+function migrateDatabase(data) {
+  const version = data.schemaVersion || 1;
+  let changed = false;
+
+  if (version < 2) {
+    // New collections
+    if (!data.lookupHistory) data.lookupHistory = [];
+    if (!data.aiCache) data.aiCache = {};
+
+    // Deep-merge settings.hotkeys (not shallow)
+    const defaultHotkeys = { ...DEFAULT_DATA.settings.hotkeys };
+    data.settings.hotkeys = { ...defaultHotkeys, ...(data.settings.hotkeys || {}) };
+    // Remove old single hotkey field
+    delete data.settings.hotkeyDoubleCopyMs;
+
+    if (!data.settings.targetLanguage) {
+      data.settings.targetLanguage = 'Vietnamese';
+    }
+
+    // Migrate each word
+    for (const w of data.words) {
+      // SRS defaults
+      if (w.easeFactor === undefined) w.easeFactor = 2.5;
+      if (w.interval === undefined) w.interval = 0;
+      if (w.repetitions === undefined) w.repetitions = 0;
+      if (w.dueDate === undefined) w.dueDate = null;
+      // Rename vietnameseMeaning → translatedMeaning
+      if (w.vietnameseMeaning && !w.translatedMeaning) {
+        w.translatedMeaning = w.vietnameseMeaning;
+      }
+      if (!w.translatedMeaning) w.translatedMeaning = '';
+    }
+
+    data.schemaVersion = 2;
+    changed = true;
+    console.log('📦 Migrated database to schema v2');
+  }
+
+  return { data, changed };
+}
+
+// ── Helpers ──
+function joinApiPath(base, apiPath) {
+  return `${base.replace(/\/+$/, '')}/${apiPath.replace(/^\/+/, '')}`;
+}
+
+function buildCacheKey(text, isPhrase, targetLang, endpoint, model) {
+  const normalized = text.toLowerCase().trim();
+  const raw = `${normalized}|${isPhrase}|${targetLang}|${endpoint}|${model}|pv1`;
+  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16);
+}
+
+function getLocalDateStr(date) {
+  const d = date || new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 let tray = null;
 let overlayWindow = null;
@@ -55,21 +120,38 @@ function loadDatabase() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
-      const data = JSON.parse(raw);
-      data.settings = { ...DEFAULT_DATA.settings, ...data.settings };
+      let data = JSON.parse(raw);
+      // Deep-merge settings (including nested hotkeys)
+      data.settings = {
+        ...DEFAULT_DATA.settings,
+        ...data.settings,
+        hotkeys: { ...DEFAULT_DATA.settings.hotkeys, ...(data.settings?.hotkeys || {}) },
+      };
       if (!data.words) data.words = [];
       if (!data.stats) data.stats = { ...DEFAULT_DATA.stats };
-      return data;
+      if (!data.lookupHistory) data.lookupHistory = [];
+      if (!data.aiCache) data.aiCache = {};
+
+      // Run migration
+      const { data: migrated, changed } = migrateDatabase(data);
+      if (changed) saveDatabase(migrated);
+      return migrated;
     }
   } catch (err) {
     console.error('Failed to load database, trying backup:', err.message);
     try {
       if (fs.existsSync(DB_BACKUP)) {
         const raw = fs.readFileSync(DB_BACKUP, 'utf-8');
-        const data = JSON.parse(raw);
-        data.settings = { ...DEFAULT_DATA.settings, ...data.settings };
+        let data = JSON.parse(raw);
+        data.settings = {
+          ...DEFAULT_DATA.settings,
+          ...data.settings,
+          hotkeys: { ...DEFAULT_DATA.settings.hotkeys, ...(data.settings?.hotkeys || {}) },
+        };
+        const { data: migrated, changed } = migrateDatabase(data);
+        if (changed) saveDatabase(migrated);
         console.log('Restored from backup successfully');
-        return data;
+        return migrated;
       }
     } catch (backupErr) {
       console.error('Backup also failed:', backupErr.message);
@@ -157,51 +239,24 @@ function extractAudioUrl(phonetics) {
    AI SERVICE — OpenAI-compatible (Main Process)
    ══════════════════════════════════════════════ */
 
-function callAI(word, apiKey, endpoint, model, isPhrase) {
+// Low-level HTTP helper — shared by callAI and testConnection
+function requestChatCompletion(endpoint, apiKey, model, messages, maxTokens) {
   return new Promise((resolve) => {
     if (!apiKey) {
-      resolve({ success: false, error: 'No API key — go to Dashboard → Settings' });
+      resolve({ success: false, error: 'No API key — go to Dashboard → Settings', statusCode: 0, latencyMs: 0 });
       return;
     }
 
-    let systemPrompt, userMessage;
-    if (isPhrase) {
-      systemPrompt = `You are a professional translator and language assistant.
-Given an English phrase or sentence, provide:
-1. "translation": Full, natural Vietnamese translation.
-2. "definition": Brief explanation of the meaning/context in English (2-3 sentences). If it contains technical or specialized terms, explain them.
-3. "vietnameseMeaning": Same as translation field.
-4. "relatedTerms": 3-5 key terms or concepts from the text.
-5. "topic": A topic/category tag that best fits the content (e.g., "Technology", "Medicine", "Law", "Business", "Science", "Literature", "Daily Life", "Education", etc.).
+    const startTime = Date.now();
+    const fullUrl = joinApiPath(endpoint, 'chat/completions');
+    const apiUrl = new URL(fullUrl);
 
-Respond ONLY with valid JSON, no markdown:
-{"translation": "...", "definition": "...", "vietnameseMeaning": "...", "relatedTerms": ["..."], "topic": "..."}`;
-      userMessage = `Translate and explain: "${word}"`;
-    } else {
-      systemPrompt = `You are a dictionary and translation assistant.
-Given a word or short phrase, provide:
-1. A clear, concise definition (2-3 sentences). If the word has a specialized meaning in any field (tech, science, medicine, law, business, etc.), mention it.
-2. Vietnamese translation of the meaning.
-3. 3-5 related terms (single words or short phrases).
-4. A topic/category tag that best fits (e.g., "Technology", "Medicine", "Law", "Business", "Science", "Mathematics", "Daily Life", "Education", etc.). Use "General" if it's a common everyday word.
-
-Respond ONLY with valid JSON, no markdown:
-{"definition": "...", "vietnameseMeaning": "...", "relatedTerms": ["...", "..."], "topic": "..."}`;
-      userMessage = `Word: "${word}"`;
-    }
-
-    // Use standard OpenAI-compatible chat/completions format
     const requestBody = JSON.stringify({
       model: model || 'google/gemini-2.0-flash-exp:free',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
+      messages,
       temperature: 0.3,
-      max_tokens: isPhrase ? 1000 : 400,
+      max_tokens: maxTokens,
     });
-
-    const apiUrl = new URL(`${endpoint}/chat/completions`);
 
     const options = {
       hostname: apiUrl.hostname,
@@ -221,48 +276,98 @@ Respond ONLY with valid JSON, no markdown:
       let data = '';
       res.on('data', (chunk) => (data += chunk));
       res.on('end', () => {
+        const latencyMs = Date.now() - startTime;
         try {
-          console.log('🤖 AI status:', res.statusCode, '| Raw (300 chars):', data.slice(0, 300));
           const parsed = JSON.parse(data);
-
           if (parsed.error) {
-            const msg = parsed.error.message || 'API error';
-            if (res.statusCode === 429 || msg.includes('quota') || msg.includes('rate')) {
-              resolve({ success: false, error: 'Rate limited — try again in ~60s' });
-            } else if (res.statusCode === 401) {
-              resolve({ success: false, error: 'Invalid API key — check Settings' });
-            } else {
-              resolve({ success: false, error: msg });
-            }
-            return;
+            resolve({ success: false, error: parsed.error.message || 'API error', statusCode: res.statusCode, latencyMs });
+          } else {
+            resolve({ success: true, data: parsed, statusCode: res.statusCode, latencyMs });
           }
-
-          // OpenAI-compatible format: choices[0].message.content
-          const content = parsed.choices[0].message.content;
-          console.log('🤖 AI content:', content.slice(0, 300));
-
-          // Parse JSON from AI response (may be wrapped in ```json blocks)
-          const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-          const result = JSON.parse(jsonStr);
-          resolve({ success: true, ...result });
         } catch (e) {
-          console.error('🤖 AI parse error:', e.message, '| Raw:', data.slice(0, 300));
-          resolve({ success: false, error: 'AI parse error: ' + e.message });
+          resolve({ success: false, error: 'Failed to parse API response', statusCode: res.statusCode, latencyMs });
         }
       });
     });
 
     req.on('error', (err) => {
-      resolve({ success: false, error: err.message });
+      resolve({ success: false, error: err.message, statusCode: 0, latencyMs: Date.now() - startTime });
     });
 
     req.on('timeout', () => {
       req.destroy();
-      resolve({ success: false, error: 'AI request timed out' });
+      resolve({ success: false, error: 'AI request timed out', statusCode: 0, latencyMs: Date.now() - startTime });
     });
 
     req.write(requestBody);
     req.end();
+  });
+}
+
+// High-level: build prompt, call API, parse JSON result
+function callAI(word, apiKey, endpoint, model, isPhrase, targetLanguage) {
+  return new Promise(async (resolve) => {
+    const lang = targetLanguage || 'Vietnamese';
+
+    let systemPrompt, userMessage;
+    if (isPhrase) {
+      systemPrompt = `You are a professional translator and language assistant.
+Given an English phrase or sentence, provide:
+1. "translation": Full, natural ${lang} translation.
+2. "definition": Brief explanation of the meaning/context in English (2-3 sentences). If it contains technical or specialized terms, explain them.
+3. "translatedMeaning": Same as translation field.
+4. "relatedTerms": 3-5 key terms or concepts from the text.
+5. "topic": A topic/category tag that best fits the content (e.g., "Technology", "Medicine", "Law", "Business", "Science", "Literature", "Daily Life", "Education", etc.).
+
+Respond ONLY with valid JSON, no markdown:
+{"translation": "...", "definition": "...", "translatedMeaning": "...", "relatedTerms": ["..."], "topic": "..."}`;
+      userMessage = `Translate and explain: "${word}"`;
+    } else {
+      systemPrompt = `You are a dictionary and translation assistant.
+Given a word or short phrase, provide:
+1. A clear, concise definition (2-3 sentences). If the word has a specialized meaning in any field (tech, science, medicine, law, business, etc.), mention it.
+2. ${lang} translation of the meaning.
+3. 3-5 related terms (single words or short phrases).
+4. A topic/category tag that best fits (e.g., "Technology", "Medicine", "Law", "Business", "Science", "Mathematics", "Daily Life", "Education", etc.). Use "General" if it's a common everyday word.
+
+Respond ONLY with valid JSON, no markdown:
+{"definition": "...", "translatedMeaning": "...", "relatedTerms": ["...", "..."], "topic": "..."}`;
+      userMessage = `Word: "${word}"`;
+    }
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage },
+    ];
+
+    const raw = await requestChatCompletion(endpoint, apiKey, model, messages, isPhrase ? 1000 : 400);
+
+    if (!raw.success) {
+      console.log('🤖 AI error:', raw.statusCode, raw.error);
+      if (raw.statusCode === 429 || raw.error?.includes('quota') || raw.error?.includes('rate')) {
+        resolve({ success: false, error: 'Rate limited — try again in ~60s' });
+      } else if (raw.statusCode === 401) {
+        resolve({ success: false, error: 'Invalid API key — check Settings' });
+      } else {
+        resolve({ success: false, error: raw.error });
+      }
+      return;
+    }
+
+    try {
+      const content = raw.data.choices[0].message.content;
+      console.log('🤖 AI content:', content.slice(0, 300));
+      const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      const result = JSON.parse(jsonStr);
+
+      // Normalize translatedMeaning (fallback chain)
+      result.translatedMeaning = result.translatedMeaning || result.translation || result.vietnameseMeaning || '';
+
+      resolve({ success: true, ...result });
+    } catch (e) {
+      console.error('🤖 AI parse error:', e.message);
+      resolve({ success: false, error: 'AI parse error: ' + e.message });
+    }
   });
 }
 
@@ -313,6 +418,38 @@ function findRelatedWords(targetWord, targetTopic, targetRelatedTerms, allWords)
 }
 
 /* ══════════════════════════════════════════════
+   SRS — SM-2 Algorithm
+   ══════════════════════════════════════════════ */
+
+function sm2(word, quality) {
+  let { easeFactor, interval, repetitions } = word;
+  easeFactor = easeFactor || 2.5;
+  interval = interval || 0;
+  repetitions = repetitions || 0;
+
+  if (quality < 3) {
+    // Again (0) or Hard-fail (1-2): reset
+    repetitions = 0;
+    interval = 0;
+  } else {
+    // Hard (3), Good (4), Easy (5): advance
+    repetitions++;
+    if (repetitions === 1) interval = 1;
+    else if (repetitions === 2) interval = 6;
+    else interval = Math.round(interval * easeFactor);
+  }
+
+  easeFactor = Math.max(1.3,
+    easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
+  );
+
+  const due = new Date(Date.now() + interval * 86400000);
+  const dueDate = due.toISOString();
+
+  return { easeFactor, interval, repetitions, dueDate };
+}
+
+/* ══════════════════════════════════════════════
    IPC HANDLERS
    ══════════════════════════════════════════════ */
 
@@ -324,7 +461,8 @@ function setupIPC() {
   ipcMain.handle('db:export', () => JSON.stringify(loadDatabase(), null, 2));
   ipcMain.handle('db:import', (event, jsonStr) => {
     try {
-      const data = JSON.parse(jsonStr);
+      const parsed = JSON.parse(jsonStr);
+      const { data } = migrateDatabase(parsed);
       return saveDatabase(data);
     } catch {
       return false;
@@ -333,7 +471,8 @@ function setupIPC() {
   ipcMain.handle('db:reset', () => saveDatabase(JSON.parse(JSON.stringify(DEFAULT_DATA))));
 
   // ── Word Lookup (orchestrates all APIs) ──
-  ipcMain.handle('lookup:word', async (event, word) => {
+  ipcMain.handle('lookup:word', async (event, word, options = {}) => {
+    const { forceRefresh = false } = options;
     const db = loadDatabase();
     const settings = db.settings;
 
@@ -341,21 +480,37 @@ function setupIPC() {
     const wordCount = word.trim().split(/\s+/).length;
     const isPhrase = wordCount > 1;
 
-    let dictResult, aiResult;
+    // ── AI Cache check ──
+    const cacheKey = buildCacheKey(word, isPhrase, settings.targetLanguage, settings.apiEndpoint, settings.model);
+    let aiResult;
+    let usedCache = false;
 
-    if (isPhrase) {
-      // For phrases/sentences: skip Dictionary API, only use AI
-      dictResult = { success: false, error: 'Phrase mode — using AI translation' };
-      aiResult = await callAI(word, settings.apiKey, settings.apiEndpoint, settings.model, true);
+    if (!forceRefresh && db.aiCache[cacheKey]) {
+      aiResult = db.aiCache[cacheKey].response;
+      usedCache = true;
+      console.log('💾 Cache hit for:', word.slice(0, 40));
     } else {
-      // For single words / short phrases: run both in parallel
-      [dictResult, aiResult] = await Promise.all([
-        lookupDictionary(word),
-        callAI(word, settings.apiKey, settings.apiEndpoint, settings.model, false),
-      ]);
+      // Call AI
+      if (isPhrase) {
+        aiResult = await callAI(word, settings.apiKey, settings.apiEndpoint, settings.model, true, settings.targetLanguage);
+      } else {
+        aiResult = await callAI(word, settings.apiKey, settings.apiEndpoint, settings.model, false, settings.targetLanguage);
+      }
+      // Store in cache if successful
+      if (aiResult.success) {
+        db.aiCache[cacheKey] = { response: aiResult, timestamp: Date.now() };
+      }
     }
 
-    // Find related words from DB (respect showRelatedWords setting)
+    // ── Dictionary (only for single words) ──
+    let dictResult;
+    if (isPhrase) {
+      dictResult = { success: false, error: 'Phrase mode — using AI translation' };
+    } else {
+      dictResult = await lookupDictionary(word);
+    }
+
+    // ── Related words ──
     const relatedWords = settings.showRelatedWords !== false
       ? findRelatedWords(
           word,
@@ -365,7 +520,34 @@ function setupIPC() {
         )
       : [];
 
-    // Auto-save word to database
+    // ── Lookup History (always saved) ──
+    db.lookupHistory.push({
+      word: word,
+      isPhrase: isPhrase,
+      timestamp: new Date().toISOString(),
+      cached: usedCache,
+    });
+    if (db.lookupHistory.length > 1000) {
+      db.lookupHistory = db.lookupHistory.slice(-1000);
+    }
+
+    // ── Stats (always updated) ──
+    const today = getLocalDateStr();
+    db.stats.totalLookups++;
+    if (db.stats.lastActiveDate === today) {
+      db.stats.todayLookups++;
+    } else {
+      const yesterdayStr = getLocalDateStr(new Date(Date.now() - 86400000));
+      if (db.stats.lastActiveDate === yesterdayStr) {
+        db.stats.streak++;
+      } else if (db.stats.lastActiveDate !== today) {
+        db.stats.streak = 1;
+      }
+      db.stats.todayLookups = 1;
+      db.stats.lastActiveDate = today;
+    }
+
+    // ── Word save (only if autoSave) ──
     let savedWordId = null, savedLookupCount = 0, savedIsFavorite = false, savedUserNote = '';
     if (settings.autoSave) {
       const existingIdx = db.words.findIndex((w) => w.word.toLowerCase() === word.toLowerCase());
@@ -373,20 +555,26 @@ function setupIPC() {
       const wordEntry = {
         id: existingIdx >= 0 ? db.words[existingIdx].id : crypto.randomUUID(),
         word: word,
-        phonetic: dictResult.success ? dictResult.phonetic : '',
-        audioUrl: dictResult.success ? dictResult.audioUrl : '',
-        meanings: dictResult.success ? dictResult.meanings : [],
-        technicalNote: aiResult.success ? aiResult.definition : '',
-        vietnameseMeaning: aiResult.success ? (aiResult.translation || aiResult.vietnameseMeaning) : '',
-        topic: aiResult.success ? aiResult.topic : '',
-        tags: aiResult.success ? (aiResult.relatedTerms || []) : [],
-        relatedTerms: aiResult.success ? (aiResult.relatedTerms || []) : [],
+        phonetic: dictResult.success ? dictResult.phonetic : (existingIdx >= 0 ? db.words[existingIdx].phonetic : ''),
+        audioUrl: dictResult.success ? dictResult.audioUrl : (existingIdx >= 0 ? db.words[existingIdx].audioUrl : ''),
+        meanings: dictResult.success ? dictResult.meanings : (existingIdx >= 0 ? db.words[existingIdx].meanings : []),
+        technicalNote: aiResult.success ? aiResult.definition : (existingIdx >= 0 ? db.words[existingIdx].technicalNote : ''),
+        translatedMeaning: aiResult.success ? aiResult.translatedMeaning : (existingIdx >= 0 ? (db.words[existingIdx].translatedMeaning || db.words[existingIdx].vietnameseMeaning) : ''),
+        vietnameseMeaning: aiResult.success ? aiResult.translatedMeaning : (existingIdx >= 0 ? db.words[existingIdx].vietnameseMeaning : ''),
+        topic: aiResult.success ? aiResult.topic : (existingIdx >= 0 ? db.words[existingIdx].topic : ''),
+        tags: aiResult.success ? (aiResult.relatedTerms || []) : (existingIdx >= 0 ? db.words[existingIdx].tags : []),
+        relatedTerms: aiResult.success ? (aiResult.relatedTerms || []) : (existingIdx >= 0 ? db.words[existingIdx].relatedTerms : []),
         userNote: existingIdx >= 0 ? db.words[existingIdx].userNote : '',
         isFavorite: existingIdx >= 0 ? db.words[existingIdx].isFavorite : false,
         lookupCount: existingIdx >= 0 ? db.words[existingIdx].lookupCount + 1 : 1,
         firstLookup: existingIdx >= 0 ? db.words[existingIdx].firstLookup : new Date().toISOString(),
         lastLookup: new Date().toISOString(),
         isPhrase: isPhrase,
+        // SRS fields (preserve existing)
+        easeFactor: existingIdx >= 0 ? db.words[existingIdx].easeFactor : 2.5,
+        interval: existingIdx >= 0 ? db.words[existingIdx].interval : 0,
+        repetitions: existingIdx >= 0 ? db.words[existingIdx].repetitions : 0,
+        dueDate: existingIdx >= 0 ? db.words[existingIdx].dueDate : null,
       };
 
       if (existingIdx >= 0) {
@@ -395,37 +583,21 @@ function setupIPC() {
         db.words.unshift(wordEntry);
       }
 
-      // Update stats (use local date, not UTC)
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      db.stats.totalLookups++;
-      if (db.stats.lastActiveDate === today) {
-        db.stats.todayLookups++;
-      } else {
-        const yesterday = new Date(now.getTime() - 86400000);
-        const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
-        if (db.stats.lastActiveDate === yesterdayStr) {
-          db.stats.streak++;
-        } else if (db.stats.lastActiveDate !== today) {
-          db.stats.streak = 1;
-        }
-        db.stats.todayLookups = 1;
-        db.stats.lastActiveDate = today;
-      }
-
-      saveDatabase(db);
-
       savedWordId = wordEntry.id;
       savedLookupCount = wordEntry.lookupCount;
       savedIsFavorite = wordEntry.isFavorite;
       savedUserNote = wordEntry.userNote;
     }
 
+    // Always save (cache + history + stats, and words if autoSave)
+    saveDatabase(db);
+
     return {
       dictionary: dictResult,
       ai: aiResult,
       relatedWords,
       isPhrase,
+      usedCache,
       savedWordId: savedWordId || null,
       savedLookupCount: savedLookupCount || 0,
       savedIsFavorite: savedIsFavorite || false,
@@ -483,10 +655,83 @@ function setupIPC() {
     return db.settings;
   });
 
-  ipcMain.handle('settings:save', (event, settings) => {
+  ipcMain.handle('settings:save', (event, newSettings) => {
     const db = loadDatabase();
-    db.settings = { ...db.settings, ...settings };
+    db.settings = {
+      ...db.settings,
+      ...newSettings,
+      hotkeys: { ...db.settings.hotkeys, ...(newSettings.hotkeys || {}) },
+    };
     return saveDatabase(db);
+  });
+
+  // ── Test Connection ──
+  ipcMain.handle('ai:testConnection', async (event, { apiKey, endpoint, model }) => {
+    const result = await requestChatCompletion(endpoint, apiKey, model,
+      [{ role: 'user', content: 'Say "ok"' }], 10);
+    return {
+      success: result.success,
+      latencyMs: result.latencyMs,
+      errorType: result.statusCode === 401 ? 'auth'
+               : result.statusCode === 429 ? 'rateLimit'
+               : result.error?.includes('timed out') ? 'timeout'
+               : result.error ? 'other' : null,
+      error: result.error || null,
+    };
+  });
+
+  // ── History ──
+  ipcMain.handle('history:get', () => {
+    const db = loadDatabase();
+    return db.lookupHistory;
+  });
+
+  ipcMain.handle('history:clear', () => {
+    const db = loadDatabase();
+    db.lookupHistory = [];
+    return saveDatabase(db);
+  });
+
+  // ── SRS (SM-2) ──
+  ipcMain.handle('study:getDueCards', () => {
+    const db = loadDatabase();
+    const now = new Date().toISOString();
+    return db.words.filter((w) =>
+      w.dueDate === null || w.dueDate === undefined || w.dueDate <= now
+    ).sort((a, b) => {
+      if (!a.dueDate) return -1;
+      if (!b.dueDate) return 1;
+      return a.dueDate.localeCompare(b.dueDate);
+    });
+  });
+
+  ipcMain.handle('study:reviewCard', (event, wordId, quality) => {
+    const db = loadDatabase();
+    const idx = db.words.findIndex((w) => w.id === wordId);
+    if (idx < 0) return false;
+
+    const word = db.words[idx];
+    const updated = sm2(word, quality);
+    db.words[idx] = { ...word, ...updated };
+    return saveDatabase(db);
+  });
+
+  // ── Cache Management ──
+  ipcMain.handle('cache:prune', () => {
+    const db = loadDatabase();
+    const cutoff = Date.now() - 30 * 86400000; // 30 days
+    let pruned = 0;
+    for (const key of Object.keys(db.aiCache)) {
+      if (db.aiCache[key].timestamp < cutoff) {
+        delete db.aiCache[key];
+        pruned++;
+      }
+    }
+    if (pruned > 0) {
+      saveDatabase(db);
+      console.log(`🧹 Pruned ${pruned} stale cache entries`);
+    }
+    return pruned;
   });
 
   // ── Shell ──
@@ -736,68 +981,173 @@ function createTray() {
 }
 
 /* ══════════════════════════════════════════════
-   GLOBAL HOTKEY
+   SPOTLIGHT WINDOW
    ══════════════════════════════════════════════ */
 
-function registerHotkey() {
-  const { execFile } = require('child_process');
-  const copyExe = path.join(__dirname, 'assets', 'copy.exe');
+let spotlightWindow = null;
 
-  const ret = globalShortcut.register('CommandOrControl+Shift+Z', () => {
-    console.log('⌨️ Hotkey Ctrl+Shift+Z pressed!');
+function createSpotlightWindow() {
+  spotlightWindow = new BrowserWindow({
+    width: 500,
+    height: 60,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-spotlight.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
 
-    // Save current clipboard to compare later
+  spotlightWindow.loadFile('spotlight.html');
+
+  spotlightWindow.on('blur', () => {
+    setTimeout(() => {
+      if (spotlightWindow && spotlightWindow.isVisible()) {
+        spotlightWindow.hide();
+      }
+    }, 200);
+  });
+
+  spotlightWindow.on('closed', () => {
+    spotlightWindow = null;
+  });
+}
+
+function toggleSpotlight() {
+  if (!spotlightWindow) createSpotlightWindow();
+
+  if (spotlightWindow.isVisible()) {
+    spotlightWindow.hide();
+  } else {
+    // Center on current display
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const x = Math.round(display.workArea.x + (display.workArea.width - 500) / 2);
+    const y = Math.round(display.workArea.y + display.workArea.height * 0.3);
+    spotlightWindow.setPosition(x, y);
+    spotlightWindow.show();
+    spotlightWindow.focus();
+    spotlightWindow.webContents.send('spotlight:show');
+  }
+}
+
+// Spotlight IPC
+ipcMain.on('spotlight:submit', (event, text) => {
+  if (spotlightWindow) spotlightWindow.hide();
+  if (text && text.trim()) showOverlay(text.trim());
+});
+
+ipcMain.on('spotlight:hide', () => {
+  if (spotlightWindow) spotlightWindow.hide();
+});
+
+/* ══════════════════════════════════════════════
+   GLOBAL HOTKEYS (Transactional)
+   ══════════════════════════════════════════════ */
+
+let currentHotkeys = {};
+
+const hotkeyHandlers = {
+  lookup: () => {
+    const { execFile } = require('child_process');
+    const copyExe = path.join(__dirname, 'assets', 'copy.exe');
+
     const oldClip = clipboard.readText();
 
-    // Simulate Ctrl+C via compiled native helper (uses Win32 keybd_event)
     execFile(copyExe, [], { timeout: 2000, windowsHide: true }, (err) => {
       if (err) {
-        console.log('⌨️ copy.exe failed, using existing clipboard:', err.message);
+        console.log('⌨️ copy.exe failed:', err.message);
       }
 
-      // Wait for clipboard to update after simulated Ctrl+C
       setTimeout(() => {
         const text = clipboard.readText().trim();
-        console.log('⌨️ Clipboard text:', JSON.stringify(text).slice(0, 100));
-        console.log('⌨️ Clipboard changed:', text !== oldClip);
-
         if (text && text.length > 0) {
-          // Guard: skip if clipboard didn't change (copy.exe failed to capture new text)
           if (text === oldClip) {
-            console.log('⌨️ Clipboard unchanged — copy.exe may have failed, skipping');
+            console.log('⌨️ Clipboard unchanged, skipping');
             return;
           }
-
-          // Join multi-line text (PDFs break lines mid-sentence)
           let word = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
-
-          // Keep up to ~50 words (enough for 2-3 sentences)
           if (word.length > 500) {
             const words = word.split(/\s+/).slice(0, 50);
             word = words.join(' ');
           }
-
-          // Final trim to 500 chars max
-          if (word.length > 500) {
-            word = word.slice(0, 500).trim();
-          }
-
-          console.log('⌨️ Word to lookup:', word);
+          if (word.length > 500) word = word.slice(0, 500).trim();
           if (word) showOverlay(word);
-        } else {
-          console.log('⌨️ Clipboard is empty — select some text first');
         }
       }, 300);
     });
-  });
+  },
+  spotlight: () => {
+    toggleSpotlight();
+  },
+};
 
-  if (!ret) {
-    console.error('❌ Failed to register global hotkey Ctrl+Shift+Z — another app may have claimed it');
-  } else {
-    console.log('✅ Global hotkey registered: Ctrl+Shift+Z');
+function registerAllHotkeys(hotkeys) {
+  const results = {};
+  for (const [name, accelerator] of Object.entries(hotkeys)) {
+    if (!hotkeyHandlers[name]) continue;
+    try {
+      const ok = globalShortcut.register(accelerator, hotkeyHandlers[name]);
+      results[name] = ok;
+      if (ok) {
+        console.log(`✅ Hotkey registered: ${name} = ${accelerator}`);
+      } else {
+        console.error(`❌ Failed to register hotkey: ${name} = ${accelerator}`);
+      }
+    } catch (err) {
+      console.error(`❌ Hotkey error for ${name}:`, err.message);
+      results[name] = false;
+    }
   }
+  return results;
 }
 
+// IPC: transactional hotkey update
+ipcMain.handle('hotkeys:update', (event, newHotkeys) => {
+  const oldHotkeys = { ...currentHotkeys };
+
+  // 1. Validate: no duplicates
+  const values = Object.values(newHotkeys);
+  if (new Set(values).size !== values.length) {
+    return { success: false, error: 'Duplicate hotkeys — each must be unique' };
+  }
+
+  // 2. Unregister old EngiLink hotkeys
+  for (const accel of Object.values(oldHotkeys)) {
+    try { globalShortcut.unregister(accel); } catch {}
+  }
+
+  // 3. Try register new
+  const results = registerAllHotkeys(newHotkeys);
+  const failed = Object.entries(results).filter(([, ok]) => !ok);
+
+  if (failed.length > 0) {
+    // 4. Rollback: unregister any new that succeeded, re-register old
+    for (const [name, ok] of Object.entries(results)) {
+      if (ok) {
+        try { globalShortcut.unregister(newHotkeys[name]); } catch {}
+      }
+    }
+    registerAllHotkeys(oldHotkeys);
+    currentHotkeys = oldHotkeys;
+    return { success: false, error: `Failed to register: ${failed.map(f => f[0]).join(', ')}` };
+  }
+
+  // 5. Success
+  currentHotkeys = { ...newHotkeys };
+  // Update tray tooltip
+  if (tray) {
+    tray.setToolTip(`EngiLink Dictionary — ${currentHotkeys.lookup} to lookup`);
+  }
+  return { success: true };
+});
 
 
 /* ══════════════════════════════════════════════
@@ -818,10 +1168,28 @@ app.whenReady().then(() => {
   setupIPC();
   createTray();
   createOverlayWindow();
-  registerHotkey();
+
+  // Register hotkeys from settings (transactional)
+  const db = loadDatabase();
+  const hotkeys = db.settings.hotkeys || { lookup: 'CommandOrControl+Shift+Z' };
+  currentHotkeys = { ...hotkeys };
+  registerAllHotkeys(hotkeys);
+
+  // Prune stale cache on startup
+  const cutoff = Date.now() - 30 * 86400000;
+  let pruned = 0;
+  for (const key of Object.keys(db.aiCache || {})) {
+    if (db.aiCache[key].timestamp < cutoff) {
+      delete db.aiCache[key];
+      pruned++;
+    }
+  }
+  if (pruned > 0) {
+    saveDatabase(db);
+    console.log(`🧹 Pruned ${pruned} stale cache entries on startup`);
+  }
 
   // Show dashboard on first launch if no API key
-  const db = loadDatabase();
   if (!db.settings.apiKey) {
     showDashboard();
   }
@@ -838,7 +1206,6 @@ app.on('window-all-closed', () => {
   // Keep running in tray — don't quit
 });
 
-// Prevent app from quitting when all windows close
 app.on('before-quit', () => {
   app.isQuitting = true;
 });

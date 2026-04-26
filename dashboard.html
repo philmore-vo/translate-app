@@ -33,6 +33,10 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
           <span>Statistics</span>
         </button>
+        <button class="nav-item" data-page="history" id="nav-history">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>History</span>
+        </button>
         <button class="nav-item" data-page="lookup" id="nav-lookup">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <span>Lookup</span>
@@ -209,6 +213,29 @@
         </div>
       </section>
 
+      <!-- ═══════ HISTORY PAGE ═══════ -->
+      <section class="page" id="page-history">
+        <div class="page-header">
+          <h1 class="page-title">📅 Lookup History</h1>
+          <div class="page-actions">
+            <button class="btn-danger" id="btn-clear-history">🗑️ Clear History</button>
+          </div>
+        </div>
+
+        <div class="stats-grid" id="history-heatmap-container" style="margin-bottom:24px;">
+          <!-- Heatmap rendered by JS -->
+        </div>
+
+        <div id="history-timeline">
+          <!-- Timeline rendered by JS -->
+        </div>
+
+        <div class="empty-state" id="history-empty" style="display:none;">
+          <h3>No lookup history yet</h3>
+          <p>Start looking up words and your history will appear here.</p>
+        </div>
+      </section>
+
       <!-- ═══════ SETTINGS PAGE ═══════ -->
       <section class="page" id="page-settings">
         <div class="page-header">
@@ -230,13 +257,54 @@
             <div class="setting-row">
               <label class="setting-label" for="setting-model">Model</label>
               <input type="text" id="setting-model" class="setting-input" placeholder="google/gemini-2.0-flash-exp:free">
-              <p class="setting-hint">e.g. google/gemini-2.0-flash-exp:free, gpt-4o-mini, llama-3.1-8b-instant</p>
             </div>
             <div class="setting-row">
               <label class="setting-label" for="setting-endpoint">API Endpoint</label>
               <input type="text" id="setting-endpoint" class="setting-input" placeholder="https://openrouter.ai/api/v1">
-              <p class="setting-hint">Base URL for OpenAI-compatible API (without /chat/completions)</p>
             </div>
+            <div class="setting-row">
+              <label class="setting-label" for="setting-language">Target Language</label>
+              <select id="setting-language" class="setting-input">
+                <option value="Vietnamese">🇻🇳 Vietnamese</option>
+                <option value="Japanese">🇯🇵 Japanese</option>
+                <option value="Korean">🇰🇷 Korean</option>
+                <option value="Chinese">🇨🇳 Chinese</option>
+                <option value="French">🇫🇷 French</option>
+                <option value="Spanish">🇪🇸 Spanish</option>
+                <option value="German">🇩🇪 German</option>
+                <option value="Thai">🇹🇭 Thai</option>
+                <option value="Indonesian">🇮🇩 Indonesian</option>
+                <option value="Russian">🇷🇺 Russian</option>
+                <option value="Portuguese">🇧🇷 Portuguese</option>
+              </select>
+            </div>
+            <div class="setting-actions" style="margin-top:12px;">
+              <button class="btn-secondary" id="btn-test-connection">🧪 Test Connection</button>
+              <span class="save-status" id="test-status"></span>
+            </div>
+          </div>
+
+          <!-- Hotkeys -->
+          <div class="settings-card">
+            <h3 class="settings-card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8"></path></svg>
+              Hotkeys
+            </h3>
+            <div class="setting-row">
+              <label class="setting-label">
+                <span>Lookup Hotkey</span>
+                <span class="setting-desc">Select text + press hotkey to translate</span>
+              </label>
+              <input type="text" id="setting-hotkey-lookup" class="setting-input" style="max-width:220px;" readonly placeholder="Press keys...">
+            </div>
+            <div class="setting-row">
+              <label class="setting-label">
+                <span>Spotlight Hotkey</span>
+                <span class="setting-desc">Open quick search bar</span>
+              </label>
+              <input type="text" id="setting-hotkey-spotlight" class="setting-input" style="max-width:220px;" readonly placeholder="Press keys...">
+            </div>
+            <span class="save-status" id="hotkey-status"></span>
           </div>
 
           <!-- Behavior -->
@@ -275,18 +343,9 @@
             </h3>
             <p class="setting-hint" id="db-path-display">Database: loading...</p>
             <div class="setting-actions">
-              <button class="btn-secondary" id="btn-export-data">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                Export JSON
-              </button>
-              <button class="btn-secondary" id="btn-import-data">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                Import JSON
-              </button>
-              <button class="btn-danger" id="btn-reset-data">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                Reset All Data
-              </button>
+              <button class="btn-secondary" id="btn-export-data">📦 Export JSON</button>
+              <button class="btn-secondary" id="btn-import-data">📥 Import JSON</button>
+              <button class="btn-danger" id="btn-reset-data">🗑️ Reset All Data</button>
             </div>
           </div>
 
@@ -297,15 +356,15 @@
               About
             </h3>
             <p class="about-text">
-              <strong>EngiLink Dictionary v1.0</strong><br>
-              A smart English-Vietnamese dictionary with AI-powered translation.<br>
-              <span class="text-muted">Hotkey: Ctrl+Shift+Z &nbsp;|&nbsp; Dictionary API: dictionaryapi.dev</span>
+              <strong>EngiLink Dictionary v2.0</strong><br>
+              A smart multilingual dictionary with AI-powered translation, caching, and spaced repetition.<br>
+              <span class="text-muted">Dictionary API: dictionaryapi.dev &nbsp;|&nbsp; SRS: SM-2 Algorithm</span>
             </p>
           </div>
         </div>
 
         <div class="settings-save-bar">
-          <button class="btn-primary" id="btn-save-settings">Save Settings</button>
+          <button class="btn-primary" id="btn-save-settings">💾 Save Settings</button>
           <span class="save-status" id="save-status"></span>
         </div>
       </section>
