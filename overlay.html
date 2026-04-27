@@ -59,6 +59,10 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
         Tech Note
       </button>
+      <button class="tab" data-tab="reading">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>
+        Reading
+      </button>
     </div>
 
     <!-- Tab Content -->
@@ -95,6 +99,25 @@
         <div class="tech-error" id="tech-error" style="display:none;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
           <span id="tech-error-text">AI unavailable</span>
+        </div>
+      </div>
+
+      <!-- Reading Tab -->
+      <div class="tab-panel" id="panel-reading">
+        <div class="reading-compose">
+          <textarea id="reading-input" spellcheck="false" placeholder="Paste a paragraph here..."></textarea>
+          <div class="reading-actions">
+            <button type="button" id="btn-reading-process">Process</button>
+            <button type="button" id="btn-reading-clear">Clear</button>
+            <button type="button" id="btn-reading-lookup">Lookup</button>
+            <button type="button" id="btn-reading-explain">Sentence</button>
+            <button type="button" id="btn-reading-translate">Translate</button>
+            <button type="button" id="btn-reading-save">Save</button>
+          </div>
+          <div class="reading-status" id="reading-status">Paste text, process it, then click any word.</div>
+        </div>
+        <div class="reading-output" id="reading-output">
+          <div class="reading-empty">Paste text and process it to start reading.</div>
         </div>
       </div>
     </div>

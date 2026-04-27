@@ -1478,6 +1478,10 @@ function setupIPC() {
     }
   });
 
+  ipcMain.on('overlay:reading', (event, text = '') => {
+    showReadingOverlay(typeof text === 'string' ? text : '');
+  });
+
   ipcMain.on('theme:preview', (event, theme) => {
     if (!['light', 'dark'].includes(theme)) return;
     runtimeTheme = theme;
@@ -1544,10 +1548,16 @@ function createOverlayWindow() {
   // Track overlay readiness
   overlayWindow._isReady = false;
   overlayWindow._pendingWord = null;
+  overlayWindow._pendingReadingText = null;
 
   overlayWindow.webContents.on('did-finish-load', () => {
     console.log('📗 Overlay webContents loaded');
     overlayWindow._isReady = true;
+    if (overlayWindow._pendingReadingText !== null) {
+      overlayWindow.webContents.send('reading:open', overlayWindow._pendingReadingText);
+      overlayWindow._pendingReadingText = null;
+      return;
+    }
     // If a word was queued before load finished, send it now
     if (overlayWindow._pendingWord) {
       console.log('📗 Sending pending word:', overlayWindow._pendingWord);
@@ -1626,6 +1636,39 @@ function showOverlay(word) {
 /* ══════════════════════════════════════════════
    DASHBOARD WINDOW
    ══════════════════════════════════════════════ */
+
+function showReadingOverlay(text = '') {
+  if (!overlayWindow) {
+    createOverlayWindow();
+  }
+
+  const cursorPos = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursorPos);
+  const bounds = display.workArea;
+
+  const db = loadDatabase();
+  const winWidth = db.settings.overlayWidth || 380;
+  const winHeight = db.settings.overlayMaxHeight || 520;
+
+  let x = cursorPos.x + 10;
+  let y = cursorPos.y + 10;
+  if (x + winWidth > bounds.x + bounds.width) x = cursorPos.x - winWidth - 10;
+  if (y + winHeight > bounds.y + bounds.height) y = cursorPos.y - winHeight - 10;
+  if (x < bounds.x) x = bounds.x;
+  if (y < bounds.y) y = bounds.y;
+
+  overlayWindow.setPosition(Math.round(x), Math.round(y));
+  overlayWindow.setSize(winWidth, 420);
+  overlayWindow._setShowTimestamp();
+  overlayWindow.show();
+  overlayWindow.focus();
+
+  if (overlayWindow._isReady) {
+    overlayWindow.webContents.send('reading:open', text);
+  } else {
+    overlayWindow._pendingReadingText = text;
+  }
+}
 
 function showDashboard() {
   if (dashboardWindow) {

@@ -1,8 +1,7 @@
-[20:06:38.515] Target foreground: [cmos-vlsi-design-by-weste.pdf - Foxit PDF Reader]
-[20:06:38.524] Clipboard before: seq=2424 text=[concept]
-[20:06:39.213] Keys released after 410ms
-[20:06:39.263] Foreground before Ctrl+C: [cmos-vlsi-design-by-weste.pdf - Foxit PDF Reader]
-[20:06:39.493] FINAL: clipboard CHANGED
-[20:06:39.493] Clipboard text length: 133
-[20:06:39.493] Clipboard text: [Figure 2.3 shows an nMOS transistor. The transistor consists of the MOS stack
-between two n-type regions called the source and drain]
+[01:06:29.046] Target foreground: [cmos-vlsi-design-by-weste.pdf - Foxit PDF Reader]
+[01:06:29.052] Clipboard before: seq=129 text=[device ]
+[01:06:29.396] Keys released after 200ms
+[01:06:29.460] Foreground before Ctrl+C: [cmos-vlsi-design-by-weste.pdf - Foxit PDF Reader]
+[01:06:29.686] FINAL: clipboard CHANGED
+[01:06:29.686] Clipboard text length: 7
+[01:06:29.686] Clipboard text: [device ]

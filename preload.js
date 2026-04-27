@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('eld', {
   openDashboard: () => ipcRenderer.send('dashboard:open'),
 
   // Word operations
+  getAllWords: () => ipcRenderer.invoke('words:getAll'),
+  importWords: (payload) => ipcRenderer.invoke('words:import', payload),
   toggleFavorite: (wordId) => ipcRenderer.invoke('words:toggleFavorite', wordId),
   updateWord: (word) => ipcRenderer.invoke('words:update', word),
 
@@ -26,5 +28,8 @@ contextBridge.exposeInMainWorld('eld', {
   },
   onThemePreview: (callback) => {
     ipcRenderer.on('theme:preview', (event, theme) => callback(theme));
+  },
+  onReadingOpen: (callback) => {
+    ipcRenderer.on('reading:open', (event, text) => callback(text));
   },
 });

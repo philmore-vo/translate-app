@@ -21,6 +21,7 @@
   const techTabOrigHTML = tabBar.querySelector('[data-tab="technical"]').innerHTML;
   const panelDict = $('#panel-dictionary');
   const panelTech = $('#panel-technical');
+  const panelReading = $('#panel-reading');
   const dictLoader = $('#dict-loader');
   const defList = $('#definitions-list');
   const dictError = $('#dict-error');
@@ -41,14 +42,31 @@
   const btnNoteSave = $('#btn-note-save');
   const btnNoteCancel = $('#btn-note-cancel');
   const audioPlayer = $('#audio-player');
+  const readingInput = $('#reading-input');
+  const readingOutput = $('#reading-output');
+  const readingStatus = $('#reading-status');
+  const btnReadingProcess = $('#btn-reading-process');
+  const btnReadingClear = $('#btn-reading-clear');
+  const btnReadingLookup = $('#btn-reading-lookup');
+  const btnReadingExplain = $('#btn-reading-explain');
+  const btnReadingTranslate = $('#btn-reading-translate');
+  const btnReadingSave = $('#btn-reading-save');
 
   let currentWordId = null;
   let currentFullText = null; // full text for TTS (not truncated)
+  let readingSelection = { word: '', sentence: '', paragraph: '' };
 
   // ── Listen for lookup from main process ──
   window.eld.onThemePreview((theme) => {
     document.body.setAttribute('data-theme', theme);
   });
+
+  if (window.eld.onReadingOpen) {
+    window.eld.onReadingOpen((text) => {
+      resetUI();
+      openReadingMode(text || '', true);
+    });
+  }
 
   window.eld.onLookupStart(async (word) => {
     // Apply theme
@@ -311,6 +329,7 @@
     tabBar.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
     panelDict.classList.toggle('active', tabName === 'dictionary');
     panelTech.classList.toggle('active', tabName === 'technical');
+    if (panelReading) panelReading.classList.toggle('active', tabName === 'reading');
     document.getElementById('overlay-root').scrollTop = 0;
 
     requestAnimationFrame(() => {
@@ -321,10 +340,46 @@
 
   tabBar.addEventListener('click', (e) => {
     const tab = e.target.closest('.tab');
-    if (tab) switchTab(tab.dataset.tab);
+    if (!tab) return;
+    if (tab.dataset.tab === 'reading') {
+      const seedText = readingInput.value.trim() || currentFullText || wordText.title || '';
+      openReadingMode(seedText, !!seedText);
+      return;
+    }
+    switchTab(tab.dataset.tab);
   });
 
   // ── Audio Playback (Dictionary audio or TTS fallback) ──
+  if (readingInput) {
+    readingInput.value = localStorage.getItem('engilink-overlay-reading-text') || '';
+
+    readingInput.addEventListener('input', debounce(() => {
+      localStorage.setItem('engilink-overlay-reading-text', readingInput.value);
+      setReadingStatus('Draft saved locally.');
+    }, 300));
+
+    btnReadingProcess.addEventListener('click', () => renderReadingMode());
+    btnReadingClear.addEventListener('click', clearReadingMode);
+    btnReadingLookup.addEventListener('click', () => lookupFromReading(readingSelection.word || getSelectedText()));
+    btnReadingExplain.addEventListener('click', () => lookupFromReading(readingSelection.sentence || getSelectedText()));
+    btnReadingTranslate.addEventListener('click', () => lookupFromReading(limitLookupText(readingInput.value)));
+    btnReadingSave.addEventListener('click', () => saveReadingEntry());
+
+    readingOutput.addEventListener('click', (e) => {
+      const token = e.target.closest('.reading-token');
+      if (!token) return;
+      readingOutput.querySelectorAll('.reading-token.active').forEach((el) => el.classList.remove('active'));
+      token.classList.add('active');
+      readingSelection = {
+        word: token.dataset.word || '',
+        sentence: token.dataset.sentence || '',
+        paragraph: token.dataset.paragraph || '',
+      };
+      setReadingStatus(`Selected: ${readingSelection.word}`);
+      lookupFromReading(readingSelection.word);
+    });
+  }
+
   btnAudio.addEventListener('click', () => {
     const word = currentFullText || wordText.title || wordText.textContent;
     if (btnAudio.dataset.hasDictAudio === 'true' && audioPlayer.src) {
@@ -426,6 +481,174 @@
   });
 
   // ── Helpers ──
+  async function openReadingMode(text, processNow) {
+    wordText.textContent = 'Reading Mode';
+    wordText.title = '';
+    partOfSpeech.textContent = 'read, click, lookup';
+    btnAudio.style.display = 'none';
+    btnFav.classList.remove('active');
+    if (btnRefresh) btnRefresh.style.display = 'none';
+    vnMeaningHeader.style.display = 'none';
+    relatedSection.style.display = 'none';
+    noteEditor.style.display = 'none';
+
+    if (typeof text === 'string' && text.trim()) {
+      readingInput.value = text.trim();
+      localStorage.setItem('engilink-overlay-reading-text', readingInput.value);
+    }
+
+    switchTab('reading');
+    if (processNow) await renderReadingMode();
+    else resizeOverlaySoon();
+  }
+
+  async function renderReadingMode() {
+    const text = readingInput.value.trim();
+    localStorage.setItem('engilink-overlay-reading-text', readingInput.value);
+    readingSelection = { word: '', sentence: '', paragraph: '' };
+
+    if (!text) {
+      readingOutput.innerHTML = '<div class="reading-empty">Paste text and process it to start reading.</div>';
+      setReadingStatus('Paste text, process it, then click any word.');
+      resizeOverlaySoon();
+      return;
+    }
+
+    let saved = new Set();
+    try {
+      const words = await window.eld.getAllWords();
+      saved = new Set((words || []).map((w) => normalizeReadingWord(w.word)).filter(Boolean));
+    } catch (_) { /* ignore */ }
+
+    readingOutput.innerHTML = renderReadingHtml(text, saved);
+    setReadingStatus(`Processed ${countReadingWords(text)} words. Saved words are highlighted.`);
+    resizeOverlaySoon();
+  }
+
+  function clearReadingMode() {
+    readingInput.value = '';
+    localStorage.removeItem('engilink-overlay-reading-text');
+    readingSelection = { word: '', sentence: '', paragraph: '' };
+    readingOutput.innerHTML = '<div class="reading-empty">Paste text and process it to start reading.</div>';
+    setReadingStatus('Cleared.');
+    resizeOverlaySoon();
+  }
+
+  async function lookupFromReading(text) {
+    text = limitLookupText(text);
+    if (!text) {
+      setReadingStatus('Select a word or sentence first.');
+      return;
+    }
+
+    resetUI();
+    currentFullText = text;
+    wordText.textContent = text;
+
+    try {
+      const result = await window.eld.lookupWord(text);
+      renderResult(result, text);
+    } catch (err) {
+      console.error('Lookup failed:', err);
+      showDictError();
+      showTechError('Lookup failed');
+    }
+  }
+
+  async function saveReadingEntry() {
+    const text = limitLookupText(readingSelection.word || getSelectedText() || readingSelection.sentence);
+    if (!text) {
+      setReadingStatus('Select a word or sentence first.');
+      return;
+    }
+
+    const result = await window.eld.importWords({
+      content: JSON.stringify([{
+        word: text,
+        topic: 'Reading',
+        technicalNote: text.split(/\s+/).length > 1 ? 'Saved sentence from Overlay Reading.' : 'Saved word from Overlay Reading.',
+        isPhrase: text.split(/\s+/).length > 1,
+      }]),
+      format: 'json',
+      filename: 'overlay-reading.json',
+    });
+
+    if (result && result.success) {
+      setReadingStatus(`Saved: ${text}`);
+      await renderReadingMode();
+    } else {
+      setReadingStatus(`Save failed: ${result?.error || 'unknown error'}`);
+    }
+  }
+
+  function renderReadingHtml(text, savedSet) {
+    const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    return paragraphs.map((paragraph) => {
+      const sentenceParts = paragraph.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [paragraph];
+      const html = sentenceParts.map((sentence) => renderReadingSentence(sentence, paragraph, savedSet)).join('');
+      return `<div class="reading-paragraph">${html}</div>`;
+    }).join('');
+  }
+
+  function renderReadingSentence(sentence, paragraph, savedSet) {
+    const regex = /[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu;
+    let html = '';
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(sentence)) !== null) {
+      const word = match[0];
+      html += escHtml(sentence.slice(lastIndex, match.index));
+      const key = normalizeReadingWord(word);
+      const classes = ['reading-token'];
+      if (savedSet.has(key)) classes.push('saved');
+      html += `<button class="${classes.join(' ')}" data-word="${escAttr(word)}" data-sentence="${escAttr(sentence.trim())}" data-paragraph="${escAttr(paragraph)}" type="button">${escHtml(word)}</button>`;
+      lastIndex = match.index + word.length;
+    }
+
+    html += escHtml(sentence.slice(lastIndex));
+    return html;
+  }
+
+  function normalizeReadingWord(word) {
+    return String(word || '').toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').trim();
+  }
+
+  function countReadingWords(text) {
+    const matches = String(text || '').match(/[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu);
+    return matches ? matches.length : 0;
+  }
+
+  function limitLookupText(text) {
+    let cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+    if (cleaned.length > 500) cleaned = cleaned.split(/\s+/).slice(0, 50).join(' ');
+    if (cleaned.length > 500) cleaned = cleaned.slice(0, 500).trim();
+    return cleaned;
+  }
+
+  function getSelectedText() {
+    return window.getSelection ? String(window.getSelection()).trim() : '';
+  }
+
+  function setReadingStatus(message) {
+    if (readingStatus) readingStatus.textContent = message;
+  }
+
+  function resizeOverlaySoon() {
+    requestAnimationFrame(() => {
+      const height = document.getElementById('overlay-root').scrollHeight;
+      window.eld.resizeOverlay(Math.max(200, height + 2));
+    });
+  }
+
+  function debounce(fn, ms) {
+    let timeout;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn.apply(this, args), ms);
+    };
+  }
+
   function escHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
@@ -433,6 +656,6 @@
   }
 
   function escAttr(str) {
-    return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 })();

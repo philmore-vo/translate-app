@@ -36,7 +36,6 @@
     setupSettings();
     setupLibrary();
     setupStudy();
-    setupReading();
     setupLookup();
     setupModal();
     setupDataManagement();
@@ -90,7 +89,6 @@
     if (page === 'library') renderLibrary();
     if (page === 'stats') renderStats();
     if (page === 'study') resetStudy();
-    if (page === 'reading') renderReadingMode();
     if (page === 'history') renderHistory();
   }
 
@@ -807,8 +805,7 @@
     $('#onboarding-reading').addEventListener('click', async () => {
       await completeOnboarding(false);
       hideOnboarding();
-      navigateTo('reading');
-      seedReadingSample();
+      window.eld.openReadingOverlay(getReadingSample());
     });
 
     if (!settings.onboardingCompleted) {
@@ -844,10 +841,14 @@
     const input = $('#reading-input');
     if (!input) return;
     if (!input.value.trim()) {
-      input.value = 'Technical documentation often explains how a system behaves, why a design decision matters, and what developers should do when something fails.';
+      input.value = getReadingSample();
       localStorage.setItem('engilink-reading-text', input.value);
     }
     await renderReadingMode();
+  }
+
+  function getReadingSample() {
+    return 'Technical documentation often explains how a system behaves, why a design decision matters, and what developers should do when something fails.';
   }
 
   function setupHealthCheck() {

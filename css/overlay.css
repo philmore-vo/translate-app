@@ -493,6 +493,122 @@ html, body {
   opacity: 0.6;
 }
 
+/* Reading */
+.reading-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reading-compose textarea {
+  width: 100%;
+  min-height: 92px;
+  max-height: 180px;
+  resize: vertical;
+  background: white;
+  border: 2px dashed var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.reading-compose textarea:focus {
+  border-color: var(--accent-primary);
+  border-style: solid;
+}
+
+.reading-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.reading-actions button {
+  min-height: 30px;
+  background: white;
+  border: 2px solid var(--border-primary);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 6px;
+  transition: all 0.2s ease;
+}
+
+.reading-actions button:hover {
+  color: var(--accent-primary);
+  background: rgba(255, 107, 107, 0.08);
+  border-color: var(--accent-primary);
+}
+
+.reading-status {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.reading-output {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(255, 243, 228, 0.75);
+  border: 2px dashed var(--border-primary);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.75;
+  user-select: text;
+}
+
+.reading-output::-webkit-scrollbar {
+  width: 6px;
+}
+
+.reading-output::-webkit-scrollbar-thumb {
+  background: var(--border-sketch);
+  border-radius: 8px;
+}
+
+.reading-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  user-select: none;
+}
+
+.reading-paragraph + .reading-paragraph {
+  margin-top: 10px;
+}
+
+.reading-token {
+  display: inline;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px dotted transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+  padding: 0 1px;
+}
+
+.reading-token:hover,
+.reading-token.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.reading-token.saved {
+  background: rgba(119, 221, 119, 0.18);
+  border-radius: 4px;
+}
+
 /* ── Error States ── */
 .dict-error, .tech-error {
   display: flex;
