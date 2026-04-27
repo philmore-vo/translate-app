@@ -57,5 +57,8 @@
     "electron": "^33.0.0",
     "electron-builder": "^25.1.8",
     "png-to-ico": "^3.0.1"
+  },
+  "dependencies": {
+    "tesseract.js": "^7.0.0"
   }
 }

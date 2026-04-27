@@ -2,7 +2,7 @@
    EngiLink Dictionary — Electron Main Process
    ============================================ */
 
-const { app, BrowserWindow, ipcMain, globalShortcut, clipboard, screen, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, clipboard, screen, Tray, Menu, nativeImage, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -28,6 +28,7 @@ const DEFAULT_DATA = {
     hotkeys: {
       lookup: 'CommandOrControl+Shift+Z',
       spotlight: 'CommandOrControl+Shift+Space',
+      ocr: 'CommandOrControl+Shift+X',
     },
     overlayWidth: 380,
     overlayMaxHeight: 520,
@@ -1177,6 +1178,128 @@ ipcMain.on('spotlight:hide', () => {
 });
 
 /* ══════════════════════════════════════════════
+   OCR SNIP WINDOW
+   ══════════════════════════════════════════════ */
+
+let snipWindow = null;
+
+function createSnipWindow() {
+  if (snipWindow && !snipWindow.isDestroyed()) {
+    snipWindow.close();
+    snipWindow = null;
+  }
+
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
+  const { x, y, width, height } = display.bounds;
+
+  snipWindow = new BrowserWindow({
+    x, y, width, height,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    fullscreen: false,
+    resizable: false,
+    movable: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-snip.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  snipWindow.loadFile('snip.html');
+  snipWindow.once('ready-to-show', () => {
+    snipWindow.show();
+    snipWindow.focus();
+  });
+
+  snipWindow.on('closed', () => { snipWindow = null; });
+}
+
+function startOCRCapture() {
+  createSnipWindow();
+}
+
+// OCR IPC: region selected
+ipcMain.on('ocr:captureRegion', async (event, rect) => {
+  try {
+    // Get the display where snip happened
+    const display = screen.getDisplayNearestPoint({ x: rect.x, y: rect.y });
+    const scaleFactor = display.scaleFactor || 1;
+
+    // Capture the screen
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: {
+        width: Math.round(display.bounds.width * scaleFactor),
+        height: Math.round(display.bounds.height * scaleFactor),
+      },
+    });
+
+    // Find the correct source for this display
+    const source = sources.find(s => {
+      const id = s.display_id;
+      return id && id === String(display.id);
+    }) || sources[0];
+
+    if (!source) {
+      console.error('❌ No screen source found for OCR');
+      if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+      return;
+    }
+
+    // Crop the thumbnail to the selected region
+    const fullImage = source.thumbnail;
+    const cropped = fullImage.crop({
+      x: Math.round((rect.x - display.bounds.x) * scaleFactor),
+      y: Math.round((rect.y - display.bounds.y) * scaleFactor),
+      width: Math.round(rect.width * scaleFactor),
+      height: Math.round(rect.height * scaleFactor),
+    });
+
+    // Close snip window
+    if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+
+    // Run OCR with tesseract.js
+    const Tesseract = require('tesseract.js');
+    const buffer = cropped.toPNG();
+    console.log('🔎 Running OCR on', rect.width, 'x', rect.height, 'region...');
+
+    const { data: { text } } = await Tesseract.recognize(buffer, 'eng', {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          console.log(`🔎 OCR progress: ${Math.round((m.progress || 0) * 100)}%`);
+        }
+      },
+    });
+
+    const cleaned = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    console.log('🔎 OCR result:', cleaned.slice(0, 100));
+
+    if (cleaned && cleaned.length > 0) {
+      // Send to overlay for translation
+      let word = cleaned;
+      if (word.length > 500) word = word.split(/\s+/).slice(0, 50).join(' ');
+      if (word.length > 500) word = word.slice(0, 500).trim();
+      showOverlay(word);
+    } else {
+      console.log('🔎 OCR: no text found in selection');
+    }
+  } catch (err) {
+    console.error('❌ OCR error:', err.message);
+    if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+  }
+});
+
+ipcMain.on('ocr:cancel', () => {
+  if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+});
+
+/* ══════════════════════════════════════════════
    GLOBAL HOTKEYS (Transactional)
    ══════════════════════════════════════════════ */
 
@@ -1214,6 +1337,9 @@ const hotkeyHandlers = {
   },
   spotlight: () => {
     toggleSpotlight();
+  },
+  ocr: () => {
+    startOCRCapture();
   },
 };
 
