@@ -54,6 +54,7 @@
 
   let currentWordId = null;
   let currentFullText = null; // full text for TTS (not truncated)
+  let currentLookupSource = 'idle';
   let readingSelection = { word: '', sentence: '', paragraph: '' };
 
   // ── Listen for lookup from main process ──
@@ -64,6 +65,7 @@
   if (window.eld.onReadingOpen) {
     window.eld.onReadingOpen((text) => {
       resetUI();
+      currentLookupSource = 'reading';
       openReadingMode(text || '', true);
     });
   }
@@ -76,6 +78,7 @@
     } catch (_) { /* ignore */ }
 
     resetUI();
+    currentLookupSource = 'external';
     currentFullText = word;
     wordText.textContent = word;
 
@@ -342,7 +345,7 @@
     const tab = e.target.closest('.tab');
     if (!tab) return;
     if (tab.dataset.tab === 'reading') {
-      const seedText = readingInput.value.trim() || currentFullText || wordText.title || '';
+      const seedText = getReadingSeedText();
       openReadingMode(seedText, !!seedText);
       return;
     }
@@ -472,6 +475,7 @@
     if (chip && chip.dataset.word) {
       resetUI();
       const word = chip.dataset.word;
+      currentLookupSource = 'external';
       currentFullText = word;
       wordText.textContent = word;
       window.eld.lookupWord(word).then((res) => {
@@ -482,21 +486,12 @@
 
   // ── Helpers ──
   async function openReadingMode(text, processNow) {
-    wordText.textContent = 'Reading Mode';
-    wordText.title = '';
-    partOfSpeech.textContent = 'read, click, lookup';
-    btnAudio.style.display = 'none';
-    btnFav.classList.remove('active');
-    if (btnRefresh) btnRefresh.style.display = 'none';
-    vnMeaningHeader.style.display = 'none';
-    relatedSection.style.display = 'none';
-    noteEditor.style.display = 'none';
-
     if (typeof text === 'string' && text.trim()) {
       readingInput.value = text.trim();
       localStorage.setItem('engilink-overlay-reading-text', readingInput.value);
     }
 
+    currentLookupSource = 'reading';
     switchTab('reading');
     if (processNow) await renderReadingMode();
     else resizeOverlaySoon();
@@ -542,6 +537,7 @@
     }
 
     resetUI();
+    currentLookupSource = 'reading';
     currentFullText = text;
     wordText.textContent = text;
 
@@ -617,6 +613,17 @@
   function countReadingWords(text) {
     const matches = String(text || '').match(/[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu);
     return matches ? matches.length : 0;
+  }
+
+  function getReadingSeedText() {
+    const lookupText = String(currentFullText || wordText.title || '').trim();
+    const draftText = readingInput ? readingInput.value.trim() : '';
+
+    if (currentLookupSource !== 'reading' && lookupText) {
+      return lookupText;
+    }
+
+    return draftText || lookupText;
   }
 
   function limitLookupText(text) {

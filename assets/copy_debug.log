@@ -1,7 +1,9 @@
-[01:06:29.046] Target foreground: [cmos-vlsi-design-by-weste.pdf - Foxit PDF Reader]
-[01:06:29.052] Clipboard before: seq=129 text=[device ]
-[01:06:29.396] Keys released after 200ms
-[01:06:29.460] Foreground before Ctrl+C: [cmos-vlsi-design-by-weste.pdf - Foxit PDF Reader]
-[01:06:29.686] FINAL: clipboard CHANGED
-[01:06:29.686] Clipboard text length: 7
-[01:06:29.686] Clipboard text: [device ]
+[01:22:18.399] Target foreground: [cmos-vlsi-design-by-weste.pdf - Foxit PDF Reader]
+[01:22:18.406] Clipboard before: seq=196 text=[The transistor consists of the MOS stack
+between two n-type...]
+[01:22:18.606] Keys released after 120ms
+[01:22:18.670] Foreground before Ctrl+C: [cmos-vlsi-design-by-weste.pdf - Foxit PDF Reader]
+[01:22:18.884] FINAL: clipboard CHANGED
+[01:22:18.884] Clipboard text length: 139
+[01:22:18.884] Clipboard text: [The behavior of MOS transistors can be understood by first examining
+an isolated MOS structure with a gate and body but no source or drain]
