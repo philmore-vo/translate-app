@@ -54,16 +54,7 @@
       "!node_modules/tesseract.js/docs/**",
       "!node_modules/tesseract.js/examples/**",
       "!node_modules/tesseract.js/dist/**",
-      "!node_modules/tesseract.js/scripts/**",
-      "!node_modules/tesseract.js-core/tesseract-core.js",
-      "!node_modules/tesseract.js-core/tesseract-core.wasm",
-      "!node_modules/tesseract.js-core/tesseract-core.wasm.js",
-      "!node_modules/tesseract.js-core/tesseract-core-simd.js",
-      "!node_modules/tesseract.js-core/tesseract-core-simd.wasm",
-      "!node_modules/tesseract.js-core/tesseract-core-simd.wasm.js",
-      "!node_modules/tesseract.js-core/tesseract-core-relaxedsimd.js",
-      "!node_modules/tesseract.js-core/tesseract-core-relaxedsimd.wasm",
-      "!node_modules/tesseract.js-core/tesseract-core-relaxedsimd.wasm.js"
+      "!node_modules/tesseract.js/scripts/**"
     ],
     "afterPack": "scripts/afterPack.js",
     "extraResources": [
@@ -78,7 +69,19 @@
     "asar": true,
     "asarUnpack": [
       "assets/copy.exe",
-      "assets/copy.vbs"
+      "assets/copy.vbs",
+      "node_modules/tesseract.js/**",
+      "node_modules/tesseract.js-core/**",
+      "node_modules/regenerator-runtime/**",
+      "node_modules/bmp-js/**",
+      "node_modules/is-url/**",
+      "node_modules/node-fetch/**",
+      "node_modules/wasm-feature-detect/**",
+      "node_modules/zlibjs/**",
+      "node_modules/idb-keyval/**",
+      "node_modules/whatwg-url/**",
+      "node_modules/tr46/**",
+      "node_modules/webidl-conversions/**"
     ]
   },
   "devDependencies": {
@@ -87,6 +90,7 @@
     "png-to-ico": "^3.0.1"
   },
   "dependencies": {
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "tesseract.js-core": "^7.0.0"
   }
 }

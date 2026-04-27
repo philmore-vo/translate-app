@@ -140,6 +140,20 @@ html, body {
   padding: 14px 14px 8px;
   border-bottom: var(--border-dashed);
   background: linear-gradient(180deg, #FFF5E8 0%, var(--bg-primary) 100%);
+  -webkit-app-region: drag;
+  cursor: move;
+}
+
+.overlay-header button,
+.overlay-header .inline-word,
+.overlay-header .word-text,
+.overlay-header .vn-meaning-text {
+  -webkit-app-region: no-drag;
+}
+
+.overlay-header .word-text {
+  cursor: text;
+  user-select: text;
 }
 
 .header-top {
@@ -607,6 +621,143 @@ html, body {
 .reading-token.saved {
   background: rgba(119, 221, 119, 0.18);
   border-radius: 4px;
+}
+
+/* ── Inline clickable words inside Dictionary / Technical content ── */
+.inline-word {
+  display: inline;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dotted transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+  padding: 0;
+  margin: 0;
+}
+
+.inline-word:hover {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.inline-word.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+/* ── Lookup Tab (dynamic sub-lookup) ── */
+.tab.tab-lookup {
+  flex: 0 1 auto;
+  max-width: 200px;
+  gap: 4px;
+}
+
+.tab-lookup-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 130px;
+}
+
+.tab-lookup-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+}
+
+.tab-lookup-close:hover {
+  background: var(--accent-primary);
+  color: white;
+}
+
+#panel-lookup .lookup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: var(--border-dashed);
+}
+
+.btn-audio-lookup {
+  width: 26px;
+  height: 26px;
+  padding: 4px;
+  flex-shrink: 0;
+}
+
+#panel-lookup .lookup-word {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+#panel-lookup .lookup-pos {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+#panel-lookup .lookup-vn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+#panel-lookup .lookup-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+#panel-lookup .lookup-section {
+  margin-bottom: 10px;
+}
+
+#panel-lookup .lookup-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+#panel-lookup .lookup-section-body {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+#panel-lookup .lookup-section-body em {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.lookup-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
 }
 
 /* ── Error States ── */

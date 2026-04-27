@@ -63,6 +63,11 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>
         Reading
       </button>
+      <button class="tab tab-lookup" data-tab="lookup" id="tab-lookup" style="display:none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <span class="tab-lookup-label" id="tab-lookup-label">Lookup</span>
+        <span class="tab-lookup-close" id="tab-lookup-close" title="Close lookup">×</span>
+      </button>
     </div>
 
     <!-- Tab Content -->
@@ -99,6 +104,35 @@
         <div class="tech-error" id="tech-error" style="display:none;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
           <span id="tech-error-text">AI unavailable</span>
+        </div>
+      </div>
+
+      <!-- Lookup Tab (sub-lookup from clicked words) -->
+      <div class="tab-panel" id="panel-lookup">
+        <div class="lookup-header" id="lookup-header">
+          <span class="lookup-word" id="lookup-word">—</span>
+          <button class="btn-audio btn-audio-lookup" id="btn-audio-lookup" title="Play pronunciation" style="display:none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.08"></path>
+            </svg>
+          </button>
+          <span class="lookup-pos" id="lookup-pos"></span>
+        </div>
+        <div class="lookup-vn" id="lookup-vn-row" style="display:none;">
+          <span class="vn-flag">🌐</span>
+          <span class="vn-text" id="lookup-vn-text"></span>
+        </div>
+        <div class="skeleton-loader" id="lookup-loader" style="display:none;">
+          <div class="skeleton-line w80"></div>
+          <div class="skeleton-line w100"></div>
+          <div class="skeleton-line w60"></div>
+        </div>
+        <div class="lookup-body" id="lookup-body"></div>
+        <div class="lookup-error" id="lookup-error" style="display:none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <span id="lookup-error-text">Lookup failed</span>
         </div>
       </div>
 

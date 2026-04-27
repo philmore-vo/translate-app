@@ -51,11 +51,27 @@
   const btnReadingExplain = $('#btn-reading-explain');
   const btnReadingTranslate = $('#btn-reading-translate');
   const btnReadingSave = $('#btn-reading-save');
+  const tabLookup = $('#tab-lookup');
+  const tabLookupLabel = $('#tab-lookup-label');
+  const tabLookupClose = $('#tab-lookup-close');
+  const panelLookup = $('#panel-lookup');
+  const lookupWordEl = $('#lookup-word');
+  const lookupPosEl = $('#lookup-pos');
+  const lookupVnRow = $('#lookup-vn-row');
+  const lookupVnText = $('#lookup-vn-text');
+  const lookupLoader = $('#lookup-loader');
+  const lookupBody = $('#lookup-body');
+  const lookupErrorEl = $('#lookup-error');
+  const lookupErrorText = $('#lookup-error-text');
+  const btnAudioLookup = $('#btn-audio-lookup');
 
   let currentWordId = null;
   let currentFullText = null; // full text for TTS (not truncated)
   let currentLookupSource = 'idle';
   let readingSelection = { word: '', sentence: '', paragraph: '' };
+  let lastLookupRequestId = 0;
+  let lookupAudio = { word: '', url: '' };
+  const lookupAudioPlayer = new Audio();
 
   // ── Listen for lookup from main process ──
   window.eld.onThemePreview((theme) => {
@@ -128,7 +144,7 @@
       if (vnTranslation) {
         const item = document.createElement('div');
         item.className = 'definition-item';
-        item.innerHTML = `<div class="definition-text" style="font-size:14px;line-height:1.6;">${escHtml(vnTranslation)}</div>`;
+        item.innerHTML = `<div class="definition-text" style="font-size:14px;line-height:1.6;">${tokenizeInline(vnTranslation)}</div>`;
         defList.appendChild(item);
       }
       defList.style.display = 'flex';
@@ -148,7 +164,7 @@
       // Show translated meaning in header (for ALL lookups)
       const vnText = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
       if (vnText) {
-        vnMeaningText.textContent = vnText;
+        vnMeaningText.innerHTML = tokenizeInline(vnText);
         vnMeaningHeader.style.display = 'flex';
       }
     } else {
@@ -219,9 +235,9 @@
             const item = document.createElement('div');
             item.className = 'definition-item';
 
-            let html = `<div class="definition-text">${escHtml(def.definition)}</div>`;
+            let html = `<div class="definition-text">${tokenizeInline(def.definition)}</div>`;
             if (def.example) {
-              html += `<div class="definition-example">"${escHtml(def.example)}"</div>`;
+              html += `<div class="definition-example">"${tokenizeInline(def.example)}"</div>`;
             }
             item.innerHTML = html;
             defList.appendChild(item);
@@ -244,8 +260,8 @@
   function renderTechNote(ai) {
     techLoader.style.display = 'none';
 
-    techDef.textContent = ai.definition || '';
-    techVnText.textContent = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
+    techDef.innerHTML = tokenizeInline(ai.definition || '');
+    techVnText.innerHTML = tokenizeInline(ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '');
 
     if (ai.topic) {
       topicBadge.textContent = ai.topic;
@@ -315,6 +331,14 @@
     relatedChips.innerHTML = '';
     lookupCountEl.textContent = '';
 
+    // Hide sub-lookup tab/panel from previous word
+    if (tabLookup) tabLookup.style.display = 'none';
+    if (lookupBody) lookupBody.innerHTML = '';
+    if (lookupVnRow) lookupVnRow.style.display = 'none';
+    if (lookupVnText) lookupVnText.innerHTML = '';
+    if (lookupErrorEl) lookupErrorEl.style.display = 'none';
+    lastLookupRequestId++;
+
     noteEditor.style.display = 'none';
     noteTextarea.value = '';
 
@@ -329,10 +353,12 @@
   // ── Tab Switching ──
   function switchTab(tabName) {
     tabBar.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
-    tabBar.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    const target = tabBar.querySelector(`[data-tab="${tabName}"]`);
+    if (target) target.classList.add('active');
     panelDict.classList.toggle('active', tabName === 'dictionary');
     panelTech.classList.toggle('active', tabName === 'technical');
     if (panelReading) panelReading.classList.toggle('active', tabName === 'reading');
+    if (panelLookup) panelLookup.classList.toggle('active', tabName === 'lookup');
     document.getElementById('overlay-root').scrollTop = 0;
 
     requestAnimationFrame(() => {
@@ -342,6 +368,11 @@
   }
 
   tabBar.addEventListener('click', (e) => {
+    if (e.target.closest('#tab-lookup-close')) {
+      e.stopPropagation();
+      closeLookupTab();
+      return;
+    }
     const tab = e.target.closest('.tab');
     if (!tab) return;
     if (tab.dataset.tab === 'reading') {
@@ -481,6 +512,13 @@
       window.eld.lookupWord(word).then((res) => {
         renderResult(res, word);
       });
+      return;
+    }
+
+    const inlineWord = e.target.closest('.inline-word');
+    if (inlineWord && inlineWord.dataset.word) {
+      e.preventDefault();
+      openLookupTab(inlineWord.dataset.word);
     }
   });
 
@@ -664,5 +702,187 @@
 
   function escAttr(str) {
     return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // ── Tokenize text into clickable inline words (for in-tab sub-lookup) ──
+  function tokenizeInline(text) {
+    const str = String(text || '');
+    if (!str) return '';
+    const regex = /[\p{L}][\p{L}\p{N}'_-]*/gu;
+    let out = '';
+    let lastIndex = 0;
+    let match;
+    while ((match = regex.exec(str)) !== null) {
+      const word = match[0];
+      out += escHtml(str.slice(lastIndex, match.index));
+      if (word.length < 2) {
+        out += escHtml(word);
+      } else {
+        out += `<button type="button" class="inline-word" data-word="${escAttr(word)}">${escHtml(word)}</button>`;
+      }
+      lastIndex = match.index + word.length;
+    }
+    out += escHtml(str.slice(lastIndex));
+    return out;
+  }
+
+  // ── Sub-lookup Tab (open looked-up word in a side tab without losing main word) ──
+  async function openLookupTab(word) {
+    const cleaned = String(word || '').trim();
+    if (!cleaned) return;
+
+    if (tabLookup) {
+      tabLookup.style.display = 'inline-flex';
+      tabLookupLabel.textContent = cleaned.length > 24 ? cleaned.slice(0, 24) + '…' : cleaned;
+      tabLookupLabel.title = cleaned;
+    }
+
+    lookupWordEl.textContent = cleaned;
+    lookupPosEl.textContent = '';
+    lookupVnRow.style.display = 'none';
+    lookupVnText.innerHTML = '';
+    lookupBody.innerHTML = '';
+    lookupErrorEl.style.display = 'none';
+    lookupLoader.style.display = 'flex';
+    if (btnAudioLookup) {
+      btnAudioLookup.classList.remove('playing');
+      btnAudioLookup.style.display = 'none';
+    }
+    try { lookupAudioPlayer.pause(); } catch (_) { /* ignore */ }
+    lookupAudio = { word: cleaned, url: '' };
+
+    switchTab('lookup');
+
+    const reqId = ++lastLookupRequestId;
+    try {
+      const result = await window.eld.lookupWord(cleaned);
+      if (reqId !== lastLookupRequestId) return; // newer request superseded this one
+      renderLookupTab(result, cleaned);
+    } catch (err) {
+      if (reqId !== lastLookupRequestId) return;
+      console.error('Sub-lookup failed:', err);
+      lookupLoader.style.display = 'none';
+      lookupErrorText.textContent = 'Lookup failed';
+      lookupErrorEl.style.display = 'flex';
+    }
+    resizeOverlaySoon();
+  }
+
+  function renderLookupTab(result, word) {
+    lookupLoader.style.display = 'none';
+    lookupBody.innerHTML = '';
+    lookupErrorEl.style.display = 'none';
+
+    const { dictionary, ai } = result || {};
+
+    // Audio: dictionary file or TTS fallback
+    lookupAudio = {
+      word,
+      url: (dictionary && dictionary.success && dictionary.audioUrl) ? dictionary.audioUrl : '',
+    };
+    if (btnAudioLookup) btnAudioLookup.style.display = 'flex';
+
+    // Phonetic / part of speech header
+    let pos = '';
+    if (dictionary && dictionary.success && dictionary.phonetic) pos += dictionary.phonetic;
+    if (dictionary && dictionary.success && dictionary.meanings && dictionary.meanings.length) {
+      const posList = dictionary.meanings.map((m) => m.partOfSpeech).filter(Boolean).join(' · ');
+      if (posList) pos += (pos ? '  ·  ' : '') + posList;
+    }
+    lookupPosEl.textContent = pos;
+
+    // Vietnamese translation header
+    const vn = (ai && ai.success) ? (ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '') : '';
+    if (vn) {
+      lookupVnText.innerHTML = tokenizeInline(vn);
+      lookupVnRow.style.display = 'flex';
+    } else {
+      lookupVnRow.style.display = 'none';
+    }
+
+    // Body sections
+    if (ai && ai.success && ai.definition) {
+      const sec = document.createElement('div');
+      sec.className = 'lookup-section';
+      sec.innerHTML = `<div class="lookup-section-title">Definition</div><div class="lookup-section-body">${tokenizeInline(ai.definition)}</div>`;
+      lookupBody.appendChild(sec);
+    }
+
+    if (dictionary && dictionary.success && dictionary.meanings) {
+      for (const meaning of dictionary.meanings) {
+        if (!meaning.definitions || !meaning.definitions.length) continue;
+        const sec = document.createElement('div');
+        sec.className = 'lookup-section';
+        const parts = [`<div class="lookup-section-title">${escHtml(meaning.partOfSpeech || 'Definition')}</div>`];
+        for (const def of meaning.definitions.slice(0, 3)) {
+          let body = `<div class="lookup-section-body">${tokenizeInline(def.definition)}`;
+          if (def.example) body += `<em>"${tokenizeInline(def.example)}"</em>`;
+          body += '</div>';
+          parts.push(body);
+        }
+        sec.innerHTML = parts.join('');
+        lookupBody.appendChild(sec);
+      }
+    }
+
+    if (!lookupBody.children.length && !vn) {
+      lookupErrorText.textContent = `No data for "${word}"`;
+      lookupErrorEl.style.display = 'flex';
+    }
+  }
+
+  function closeLookupTab() {
+    if (tabLookup) tabLookup.style.display = 'none';
+    if (btnAudioLookup) btnAudioLookup.style.display = 'none';
+    lookupBody.innerHTML = '';
+    lookupVnRow.style.display = 'none';
+    lookupVnText.innerHTML = '';
+    lookupErrorEl.style.display = 'none';
+    lookupAudio = { word: '', url: '' };
+    try { lookupAudioPlayer.pause(); } catch (_) { /* ignore */ }
+    lastLookupRequestId++;
+    switchTab('dictionary');
+  }
+
+  // ── Audio for Lookup tab ──
+  if (btnAudioLookup) {
+    btnAudioLookup.addEventListener('click', () => {
+      const word = lookupAudio.word || lookupWordEl.textContent || '';
+      if (!word || word === '—') return;
+
+      if (lookupAudio.url) {
+        try {
+          window.speechSynthesis && window.speechSynthesis.cancel();
+          lookupAudioPlayer.src = lookupAudio.url;
+          lookupAudioPlayer.currentTime = 0;
+          btnAudioLookup.classList.add('playing');
+          lookupAudioPlayer.onended = () => btnAudioLookup.classList.remove('playing');
+          lookupAudioPlayer.onerror = () => {
+            btnAudioLookup.classList.remove('playing');
+            playLookupTTS(word);
+          };
+          lookupAudioPlayer.play().catch(() => {
+            btnAudioLookup.classList.remove('playing');
+            playLookupTTS(word);
+          });
+        } catch (_) {
+          playLookupTTS(word);
+        }
+      } else {
+        playLookupTTS(word);
+      }
+    });
+  }
+
+  function playLookupTTS(word) {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.9;
+    btnAudioLookup.classList.add('playing');
+    utterance.onend = () => btnAudioLookup.classList.remove('playing');
+    utterance.onerror = () => btnAudioLookup.classList.remove('playing');
+    window.speechSynthesis.speak(utterance);
   }
 })();

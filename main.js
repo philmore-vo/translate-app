@@ -1867,6 +1867,16 @@ function getOcrLangPath() {
   return app.isPackaged ? process.resourcesPath : __dirname;
 }
 
+function getTesseractPaths() {
+  const baseDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
+    : path.join(__dirname, 'node_modules');
+  return {
+    corePath: path.join(baseDir, 'tesseract.js-core'),
+    workerPath: path.join(baseDir, 'tesseract.js', 'src', 'worker-script', 'node', 'index.js'),
+  };
+}
+
 function cleanupOcrPreviewText(text) {
   return String(text || '')
     .replace(/\r\n/g, '\n')
@@ -2038,8 +2048,13 @@ ipcMain.on('ocr:captureRegion', async (event, rect) => {
       return;
     }
 
+    const { corePath, workerPath } = getTesseractPaths();
     const ocrOptions = {
       langPath: bundledLangPath,
+      corePath,
+      workerPath,
+      gzip: false,
+      cachePath: app.getPath('userData'),
       logger: (m) => {
         if (m.status === 'recognizing text') {
           console.log(`🔎 OCR progress: ${Math.round((m.progress || 0) * 100)}%`);
