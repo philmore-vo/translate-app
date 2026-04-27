@@ -1230,6 +1230,13 @@ ipcMain.on('ocr:captureRegion', async (event, rect) => {
     // Get the display where snip happened
     const display = screen.getDisplayNearestPoint({ x: rect.x, y: rect.y });
     const scaleFactor = display.scaleFactor || 1;
+    const activeSnipWindow = snipWindow && !snipWindow.isDestroyed() ? snipWindow : null;
+
+    // Capture a clean screenshot without the transparent snip overlay/spinner.
+    if (activeSnipWindow) {
+      activeSnipWindow.hide();
+      await new Promise(resolve => setTimeout(resolve, 120));
+    }
 
     // Capture the screen
     const sources = await desktopCapturer.getSources({
@@ -1248,7 +1255,7 @@ ipcMain.on('ocr:captureRegion', async (event, rect) => {
 
     if (!source) {
       console.error('❌ No screen source found for OCR');
-      if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+      closeSnipAndNotify('No screen source found. Please try again.');
       return;
     }
 
@@ -1261,21 +1268,41 @@ ipcMain.on('ocr:captureRegion', async (event, rect) => {
       height: Math.round(rect.height * scaleFactor),
     });
 
-    // Close snip window
-    if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+    // The renderer already switched to "Extracting text...", so show it during OCR.
+    if (activeSnipWindow && !activeSnipWindow.isDestroyed()) {
+      activeSnipWindow.show();
+      activeSnipWindow.focus();
+    }
 
-    // Run OCR with tesseract.js
+    // Run OCR with tesseract.js (keep snip window open for loading indicator)
     const Tesseract = require('tesseract.js');
     const buffer = cropped.toPNG();
     console.log('🔎 Running OCR on', rect.width, 'x', rect.height, 'region...');
 
-    const { data: { text } } = await Tesseract.recognize(buffer, 'eng', {
+    // Determine langPath: use bundled traineddata if available
+    const bundledLangPath = app.isPackaged
+      ? path.join(process.resourcesPath)
+      : __dirname;
+
+    const ocrOptions = {
       logger: (m) => {
         if (m.status === 'recognizing text') {
           console.log(`🔎 OCR progress: ${Math.round((m.progress || 0) * 100)}%`);
         }
       },
-    });
+    };
+
+    // Check if bundled traineddata exists for offline use
+    const trainedDataPath = path.join(bundledLangPath, 'eng.traineddata');
+    if (fs.existsSync(trainedDataPath)) {
+      ocrOptions.langPath = bundledLangPath;
+      console.log('🔎 Using bundled eng.traineddata:', trainedDataPath);
+    }
+
+    const { data: { text } } = await Tesseract.recognize(buffer, 'eng', ocrOptions);
+
+    // Close snip window now that OCR is done
+    if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
 
     const cleaned = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
     console.log('🔎 OCR result:', cleaned.slice(0, 100));
@@ -1287,13 +1314,24 @@ ipcMain.on('ocr:captureRegion', async (event, rect) => {
       if (word.length > 500) word = word.slice(0, 500).trim();
       showOverlay(word);
     } else {
-      console.log('🔎 OCR: no text found in selection');
+      closeSnipAndNotify('No text found in the selected area. Try selecting a larger region with clearer text.');
     }
   } catch (err) {
     console.error('❌ OCR error:', err.message);
-    if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+    closeSnipAndNotify('OCR failed: ' + err.message);
   }
 });
+
+function closeSnipAndNotify(message) {
+  if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+  const { dialog } = require('electron');
+  dialog.showMessageBox({
+    type: 'warning',
+    title: 'EngiLink OCR',
+    message: message,
+    buttons: ['OK'],
+  });
+}
 
 ipcMain.on('ocr:cancel', () => {
   if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();

@@ -41,16 +41,23 @@
       "preload.js",
       "preload-dashboard.js",
       "preload-spotlight.js",
+      "preload-snip.js",
       "overlay.html",
       "dashboard.html",
       "spotlight.html",
+      "snip.html",
       "js/**/*",
       "css/**/*",
       "assets/**/*",
       "!assets/copy_debug.log",
       "!assets/copy.cs"
     ],
-    "extraResources": [],
+    "extraResources": [
+      {
+        "from": "eng.traineddata",
+        "to": "eng.traineddata"
+      }
+    ],
     "asar": true
   },
   "devDependencies": {
