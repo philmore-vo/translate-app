@@ -12,6 +12,21 @@
   <div class="snip-processing" id="snip-processing">
     <span class="spinner"></span> Extracting text...
   </div>
+  <div class="snip-preview" id="snip-preview" style="display:none;">
+    <div class="snip-preview-header">
+      <div>
+        <h1>OCR Preview</h1>
+        <p id="snip-preview-meta">Review and edit text before lookup.</p>
+      </div>
+      <button class="snip-icon-btn" id="snip-preview-close" type="button" title="Cancel">x</button>
+    </div>
+    <textarea id="snip-preview-text" spellcheck="false"></textarea>
+    <div class="snip-preview-actions">
+      <button id="snip-lookup-word" type="button">Lookup Word</button>
+      <button id="snip-translate-text" type="button">Translate Text</button>
+      <button id="snip-save-text" type="button">Save to Library</button>
+    </div>
+  </div>
   <script src="js/snip.js"></script>
 </body>
 </html>

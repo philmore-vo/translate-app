@@ -11,7 +11,12 @@ contextBridge.exposeInMainWorld('eld', {
   getDbPath: () => ipcRenderer.invoke('db:getPath'),
   exportData: () => ipcRenderer.invoke('db:export'),
   importData: (json) => ipcRenderer.invoke('db:import', json),
+  exportFullBackup: () => ipcRenderer.invoke('db:exportFullBackup'),
+  restoreFullBackup: (json) => ipcRenderer.invoke('db:restoreFullBackup', json),
+  listBackups: () => ipcRenderer.invoke('db:listBackups'),
+  restoreAutoBackup: (name) => ipcRenderer.invoke('db:restoreAutoBackup', name),
   resetData: () => ipcRenderer.invoke('db:reset'),
+  getAppHealth: () => ipcRenderer.invoke('app:healthCheck'),
 
   // Words
   getAllWords: () => ipcRenderer.invoke('words:getAll'),
@@ -20,6 +25,8 @@ contextBridge.exposeInMainWorld('eld', {
   toggleFavorite: (id) => ipcRenderer.invoke('words:toggleFavorite', id),
   updateNote: (id, note) => ipcRenderer.invoke('words:updateNote', id, note),
   batchDelete: (ids) => ipcRenderer.invoke('words:batchDelete', ids),
+  exportWords: (options) => ipcRenderer.invoke('words:export', options),
+  importWords: (payload) => ipcRenderer.invoke('words:import', payload),
   lookupWord: (word, options) => ipcRenderer.invoke('lookup:word', word, options),
 
   // Stats

@@ -533,9 +533,132 @@ a:hover { text-decoration: underline; }
 }
 
 /* ══════════════════════════════════
-   STUDY MODE
+   READING MODE
    ══════════════════════════════════ */
 
+/* Reading Mode */
+.reading-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.reading-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reading-input {
+  width: 100%;
+  min-height: 320px;
+  max-height: 60vh;
+  resize: vertical;
+  padding: 14px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.6;
+  outline: none;
+}
+
+.reading-input:focus {
+  border-color: var(--accent-light);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.reading-status {
+  min-height: 18px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.reading-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
+.reading-selected {
+  flex: 1;
+  min-width: 180px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reading-output {
+  grid-column: 2;
+  min-height: 420px;
+  max-height: 68vh;
+  overflow: auto;
+  padding: 22px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.85;
+}
+
+.reading-paragraph {
+  margin-bottom: 18px;
+}
+
+.reading-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 80px 20px;
+}
+
+.reading-token {
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 1px 2px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.reading-token:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
+.reading-token.saved {
+  background: var(--green-bg);
+  color: var(--green);
+  font-weight: 700;
+}
+
+.reading-token.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+@media (max-width: 980px) {
+  .reading-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .reading-output {
+    grid-column: 1;
+  }
+}
+
+/* Study Mode */
 .study-intro, .study-complete {
   text-align: center;
   padding: 60px 20px;
@@ -985,6 +1108,78 @@ a:hover { text-decoration: underline; }
 
 .settings-card-title svg { color: var(--accent-light); }
 
+.data-subsection {
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.data-subsection:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.data-subsection h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.data-danger-row {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.health-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.health-empty {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.health-row {
+  display: grid;
+  grid-template-columns: 82px minmax(110px, 150px) 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.health-badge {
+  display: inline-flex;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.health-badge.ok { color: var(--green); background: var(--green-bg); }
+.health-badge.warn { color: var(--orange); background: var(--orange-bg); }
+.health-badge.error { color: var(--red); background: var(--red-bg); }
+
+.health-label {
+  font-weight: 800;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.health-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
@@ -1162,6 +1357,73 @@ a:hover { text-decoration: underline; }
   background: var(--bg-hover);
 }
 
+.onboarding-content {
+  max-width: 680px;
+}
+
+.onboarding-kicker {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0;
+  margin-bottom: 8px;
+}
+
+.onboarding-title {
+  font-size: 26px;
+  line-height: 1.15;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.onboarding-copy {
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 16px;
+}
+
+.onboarding-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-step {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
+.onboarding-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-weight: 800;
+}
+
+.onboarding-step p {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
 /* Modal word detail */
 .md-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .md-word { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 4px; }
@@ -1258,6 +1520,21 @@ a:hover { text-decoration: underline; }
 }
 .batch-toolbar button:hover { background: rgba(255,255,255,0.35); }
 .batch-toolbar .batch-count { flex: 1; }
+.batch-toolbar select {
+  min-width: 96px;
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 10px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+}
+.batch-toolbar select option {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
 @keyframes slideDown { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 .word-card .wc-checkbox {

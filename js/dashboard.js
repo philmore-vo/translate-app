@@ -17,6 +17,9 @@
   let studyRevealed = false;
   let selectMode = false;
   let selectedIds = new Set();
+  let pendingImportMode = null;
+  let readingSelection = { word: '', sentence: '', paragraph: '' };
+  let lastHealthReport = null;
 
   /* ══════════════════════════════════
      INITIALIZATION
@@ -33,9 +36,12 @@
     setupSettings();
     setupLibrary();
     setupStudy();
+    setupReading();
     setupLookup();
     setupModal();
     setupDataManagement();
+    setupOnboarding();
+    setupHealthCheck();
     setupHistory();
     setupBatchSelection();
 
@@ -84,6 +90,7 @@
     if (page === 'library') renderLibrary();
     if (page === 'stats') renderStats();
     if (page === 'study') resetStudy();
+    if (page === 'reading') renderReadingMode();
     if (page === 'history') renderHistory();
   }
 
@@ -224,8 +231,7 @@
     $('#modal-body').addEventListener('click', (e) => {
       const chip = e.target.closest('.md-related-chip');
       if (!chip || !chip.dataset.word) return;
-      $('#word-detail-modal').style.display = 'none';
-      window.eld.showOverlay(chip.dataset.word);
+      openOverlayLookup(chip.dataset.word);
     });
   }
 
@@ -306,8 +312,7 @@
 
     // Attach action handlers
     $('#modal-btn-overlay').addEventListener('click', () => {
-      $('#word-detail-modal').style.display = 'none';
-      window.eld.showOverlay(w.word);
+      openOverlayLookup(w.word);
     });
 
     $('#modal-btn-audio').addEventListener('click', () => {
@@ -515,7 +520,7 @@
       }
 
       const chip = e.target.closest('.lookup-related-chip');
-      if (chip && chip.dataset.word) runDashboardLookup(chip.dataset.word);
+      if (chip && chip.dataset.word) openOverlayLookup(chip.dataset.word);
     });
   }
 
@@ -607,6 +612,298 @@
      SETTINGS
      ══════════════════════════════════ */
 
+  /* ============================================
+     READING MODE
+     ============================================ */
+
+  function setupReading() {
+    const input = $('#reading-input');
+    const output = $('#reading-output');
+    if (!input || !output) return;
+
+    input.value = localStorage.getItem('engilink-reading-text') || '';
+
+    $('#btn-reading-render').addEventListener('click', renderReadingMode);
+    $('#btn-reading-clear').addEventListener('click', clearReadingMode);
+    input.addEventListener('input', debounce(() => {
+      localStorage.setItem('engilink-reading-text', input.value);
+      setReadingStatus('Draft saved locally.');
+    }, 300));
+
+    output.addEventListener('click', (e) => {
+      const token = e.target.closest('.reading-token');
+      if (!token) return;
+
+      $$('.reading-token.active').forEach((el) => el.classList.remove('active'));
+      token.classList.add('active');
+      readingSelection = {
+        word: token.dataset.word || '',
+        sentence: token.dataset.sentence || '',
+        paragraph: token.dataset.paragraph || '',
+      };
+      updateReadingSelection();
+      openOverlayLookup(readingSelection.word);
+    });
+
+    $('#btn-reading-lookup').addEventListener('click', () => {
+      const text = readingSelection.word || getSelectedTextFromReading();
+      if (text) openOverlayLookup(text);
+      else setReadingStatus('Select a word first.', true);
+    });
+
+    $('#btn-reading-save-word').addEventListener('click', () => saveReadingEntry('word'));
+    $('#btn-reading-save-phrase').addEventListener('click', () => saveReadingEntry('phrase'));
+    $('#btn-reading-explain').addEventListener('click', () => {
+      const text = readingSelection.sentence || getSelectedTextFromReading();
+      if (text) openOverlayLookup(limitOverlayText(text));
+      else setReadingStatus('Select a sentence first.', true);
+    });
+    $('#btn-reading-translate').addEventListener('click', () => {
+      const text = readingSelection.paragraph || input.value.trim();
+      if (text) openOverlayLookup(limitOverlayText(text));
+      else setReadingStatus('Paste text first.', true);
+    });
+  }
+
+  async function renderReadingMode() {
+    const input = $('#reading-input');
+    const output = $('#reading-output');
+    if (!input || !output) return;
+
+    const text = input.value.trim();
+    localStorage.setItem('engilink-reading-text', input.value);
+    readingSelection = { word: '', sentence: '', paragraph: '' };
+    updateReadingSelection();
+
+    if (!text) {
+      output.innerHTML = '<div class="reading-empty">Paste text and process it to start reading.</div>';
+      setReadingStatus('Ready');
+      return;
+    }
+
+    allWords = await window.eld.getAllWords();
+    const saved = new Set(allWords.map((w) => normalizeReadingWord(w.word)).filter(Boolean));
+    output.innerHTML = renderReadingHtml(text, saved);
+    setReadingStatus(`Processed ${countReadingWords(text)} words. Saved words are highlighted.`);
+  }
+
+  function clearReadingMode() {
+    $('#reading-input').value = '';
+    $('#reading-output').innerHTML = '<div class="reading-empty">Paste text and process it to start reading.</div>';
+    localStorage.removeItem('engilink-reading-text');
+    readingSelection = { word: '', sentence: '', paragraph: '' };
+    updateReadingSelection();
+    setReadingStatus('Cleared.');
+  }
+
+  function renderReadingHtml(text, savedSet) {
+    const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    return paragraphs.map((paragraph) => {
+      const sentenceParts = paragraph.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [paragraph];
+      const html = sentenceParts.map((sentence) => renderReadingSentence(sentence, paragraph, savedSet)).join('');
+      return `<div class="reading-paragraph">${html}</div>`;
+    }).join('');
+  }
+
+  function renderReadingSentence(sentence, paragraph, savedSet) {
+    const regex = /[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu;
+    let html = '';
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(sentence)) !== null) {
+      const word = match[0];
+      html += escHtml(sentence.slice(lastIndex, match.index));
+      const key = normalizeReadingWord(word);
+      const classes = ['reading-token'];
+      if (savedSet.has(key)) classes.push('saved');
+      html += `<button class="${classes.join(' ')}" data-word="${escAttr(word)}" data-sentence="${escAttr(sentence.trim())}" data-paragraph="${escAttr(paragraph)}" type="button">${escHtml(word)}</button>`;
+      lastIndex = match.index + word.length;
+    }
+
+    html += escHtml(sentence.slice(lastIndex));
+    return html;
+  }
+
+  function normalizeReadingWord(word) {
+    return String(word || '').toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').trim();
+  }
+
+  function countReadingWords(text) {
+    const matches = String(text || '').match(/[\p{L}\p{N}][\p{L}\p{N}'_-]*/gu);
+    return matches ? matches.length : 0;
+  }
+
+  function updateReadingSelection() {
+    const selected = $('#reading-selected');
+    if (!selected) return;
+    selected.textContent = readingSelection.word ? `Selected: ${readingSelection.word}` : 'No word selected';
+  }
+
+  function setReadingStatus(message, isError) {
+    const status = $('#reading-status');
+    if (!status) return;
+    status.textContent = message;
+    status.style.color = isError ? 'var(--red)' : 'var(--text-muted)';
+  }
+
+  function getSelectedTextFromReading() {
+    return window.getSelection ? String(window.getSelection()).trim() : '';
+  }
+
+  function limitOverlayText(text) {
+    let cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+    if (cleaned.length > 500) cleaned = cleaned.split(/\s+/).slice(0, 50).join(' ');
+    if (cleaned.length > 500) cleaned = cleaned.slice(0, 500).trim();
+    return cleaned;
+  }
+
+  async function saveReadingEntry(mode) {
+    const raw = mode === 'phrase'
+      ? (readingSelection.sentence || getSelectedTextFromReading())
+      : (readingSelection.word || getSelectedTextFromReading());
+    const text = limitOverlayText(raw);
+    if (!text) {
+      setReadingStatus(mode === 'phrase' ? 'Select a sentence first.' : 'Select a word first.', true);
+      return;
+    }
+
+    const result = await window.eld.importWords({
+      content: JSON.stringify([{
+        word: text,
+        topic: 'Reading',
+        relatedTerms: [],
+        technicalNote: mode === 'phrase' ? 'Saved phrase from Reading Mode.' : 'Saved word from Reading Mode.',
+        isPhrase: text.split(/\s+/).length > 1,
+      }]),
+      format: 'json',
+      filename: 'reading-mode.json',
+    });
+
+    if (result && result.success) {
+      allWords = await window.eld.getAllWords();
+      await renderReadingMode();
+      setReadingStatus(`Saved ${text}.`);
+    } else {
+      setReadingStatus(`Save failed: ${result?.error || 'unknown error'}`, true);
+    }
+  }
+
+  /* ============================================
+     ONBOARDING + HEALTH CHECK
+     ============================================ */
+
+  function setupOnboarding() {
+    const modal = $('#onboarding-modal');
+    if (!modal) return;
+
+    $('#onboarding-close').addEventListener('click', () => completeOnboarding());
+    $('#onboarding-done').addEventListener('click', () => completeOnboarding());
+    $('#onboarding-settings').addEventListener('click', async () => {
+      await completeOnboarding(false);
+      hideOnboarding();
+      navigateTo('settings');
+    });
+    $('#onboarding-reading').addEventListener('click', async () => {
+      await completeOnboarding(false);
+      hideOnboarding();
+      navigateTo('reading');
+      seedReadingSample();
+    });
+
+    if (!settings.onboardingCompleted) {
+      setTimeout(() => showOnboarding(), 350);
+    }
+  }
+
+  function showOnboarding() {
+    const modal = $('#onboarding-modal');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function hideOnboarding() {
+    const modal = $('#onboarding-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function completeOnboarding(closeModal = true) {
+    const completedAt = new Date().toISOString();
+    settings = {
+      ...settings,
+      onboardingCompleted: true,
+      onboardingCompletedAt: completedAt,
+    };
+    await window.eld.saveSettings({
+      onboardingCompleted: true,
+      onboardingCompletedAt: completedAt,
+    });
+    if (closeModal) hideOnboarding();
+  }
+
+  async function seedReadingSample() {
+    const input = $('#reading-input');
+    if (!input) return;
+    if (!input.value.trim()) {
+      input.value = 'Technical documentation often explains how a system behaves, why a design decision matters, and what developers should do when something fails.';
+      localStorage.setItem('engilink-reading-text', input.value);
+    }
+    await renderReadingMode();
+  }
+
+  function setupHealthCheck() {
+    const runBtn = $('#btn-run-health');
+    if (!runBtn) return;
+
+    runBtn.addEventListener('click', runHealthCheck);
+    $('#btn-export-health').addEventListener('click', () => {
+      if (!lastHealthReport) {
+        setDataStatus('#health-summary', 'Run Health Check first.', true);
+        return;
+      }
+      const date = new Date().toISOString().split('T')[0];
+      downloadTextFile(
+        JSON.stringify(lastHealthReport, null, 2),
+        `engilink-health-${date}.json`,
+        'application/json'
+      );
+      setDataStatus('#health-summary', 'Health report exported.');
+    });
+  }
+
+  async function runHealthCheck() {
+    setDataStatus('#health-summary', 'Checking app health...');
+    const result = await window.eld.getAppHealth();
+    lastHealthReport = result;
+    renderHealthReport(result);
+    settings = await window.eld.getSettings();
+  }
+
+  function renderHealthReport(report) {
+    const list = $('#health-list');
+    if (!list) return;
+
+    if (!report || !report.success) {
+      list.innerHTML = '<div class="health-empty">Health check failed.</div>';
+      setDataStatus('#health-summary', 'Health check failed.', true);
+      return;
+    }
+
+    const statusText = report.overall === 'ok'
+      ? 'All core checks passed.'
+      : report.overall === 'error'
+        ? 'Some checks need attention.'
+        : 'App is usable, but a few things can be improved.';
+    setDataStatus('#health-summary', `${statusText} App v${report.appVersion}, schema v${report.schemaVersion}.`, report.overall === 'error');
+
+    list.innerHTML = report.checks.map((check) => `
+      <div class="health-row">
+        <span class="health-badge ${escAttr(check.status)}">${escHtml(check.status)}</span>
+        <span class="health-label">${escHtml(check.label)}</span>
+        <span class="health-detail">${escHtml(check.detail)}</span>
+      </div>
+    `).join('');
+  }
+
   let settingsEventsAttached = false;
 
   function setupSettings() {
@@ -625,6 +922,7 @@
         autoSave: $('#setting-autosave').checked,
         showRelatedWords: $('#setting-related').checked,
         theme: $('#setting-theme-dark').checked ? 'dark' : 'light',
+        ocrLanguage: $('#setting-ocr-language').value || 'eng',
       };
 
       // Update hotkeys transactionally first
@@ -719,6 +1017,7 @@
     $('#setting-language').value = settings.targetLanguage || 'Vietnamese';
     $('#setting-autosave').checked = settings.autoSave !== false;
     $('#setting-related').checked = settings.showRelatedWords !== false;
+    $('#setting-ocr-language').value = settings.ocrLanguage || 'eng';
     // Hotkeys
     if (settings.hotkeys) {
       $('#setting-hotkey-lookup').value = settings.hotkeys.lookup || 'CommandOrControl+Shift+Z';
@@ -726,66 +1025,146 @@
       $('#setting-hotkey-ocr').value = settings.hotkeys.ocr || 'CommandOrControl+Shift+X';
     }
     // Theme
-    $('#setting-theme-dark').checked = settings.theme === 'dark';
-
-    // Live theme toggle
-    $('#setting-theme-dark').addEventListener('change', (e) => {
+    const themeToggle = $('#setting-theme-dark');
+    themeToggle.checked = settings.theme === 'dark';
+    themeToggle.onchange = (e) => {
       const theme = e.target.checked ? 'dark' : 'light';
       applyTheme(theme);
       window.eld.previewTheme(theme);
-    });
+    };
   }
 
   /* ══════════════════════════════════
      DATA MANAGEMENT
      ══════════════════════════════════ */
 
+  function downloadTextFile(content, filename, mime) {
+    const blob = new Blob([content], { type: mime || 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function refreshDashboardData() {
+    allWords = await window.eld.getAllWords();
+    settings = await window.eld.getSettings();
+    applyTheme(settings.theme || 'light');
+    renderLibrary();
+    renderStats();
+    renderHeatmap();
+    populateSettings();
+    await refreshBackupStatus();
+  }
+
+  function setDataStatus(selector, message, isError) {
+    const el = $(selector);
+    if (!el) return;
+    el.textContent = message;
+    el.style.color = isError ? 'var(--red)' : 'var(--text-muted)';
+  }
+
+  async function refreshBackupStatus() {
+    const result = await window.eld.listBackups();
+    if (!result || !result.success) {
+      setDataStatus('#backup-status', 'Auto-backups: unavailable', true);
+      return;
+    }
+    const latest = result.backups && result.backups[0];
+    if (!latest) {
+      setDataStatus('#backup-status', 'Auto-backups: none yet');
+      return;
+    }
+    const time = new Date(latest.createdAt).toLocaleString();
+    setDataStatus('#backup-status', `Auto-backups: ${result.backups.length} kept. Latest: ${time}`);
+  }
+
   function setupDataManagement() {
-    // Export
-    $('#btn-export-data').addEventListener('click', async () => {
-      const data = await window.eld.exportData();
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `engilink-backup-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+    refreshBackupStatus();
+
+    $('#btn-export-full-backup').addEventListener('click', async () => {
+      const result = await window.eld.exportFullBackup();
+      if (!result || !result.success) {
+        setDataStatus('#backup-status', 'Export failed', true);
+        return;
+      }
+      downloadTextFile(result.content, result.filename, 'application/json');
+      setDataStatus('#backup-status', 'Full backup exported.');
     });
 
-    // Import
-    $('#btn-import-data').addEventListener('click', () => {
-      $('#import-file-input').click();
+    $('#btn-restore-full-backup').addEventListener('click', () => {
+      pendingImportMode = 'restore-full';
+      const input = $('#import-file-input');
+      input.accept = '.json';
+      input.click();
+    });
+
+    $('#btn-restore-latest-backup').addEventListener('click', async () => {
+      if (!confirm('Restore the latest auto-backup? Current data will be backed up first.')) return;
+      const result = await window.eld.restoreAutoBackup();
+      if (result && result.success) {
+        await refreshDashboardData();
+        setDataStatus('#backup-status', `Restored backup with ${result.words || 0} words.`);
+      } else {
+        setDataStatus('#backup-status', `Restore failed: ${result?.error || 'unknown error'}`, true);
+      }
+    });
+
+    $('#btn-export-words').addEventListener('click', async () => {
+      const format = $('#word-export-format').value || 'json';
+      const result = await window.eld.exportWords({ format });
+      if (!result || !result.success) {
+        setDataStatus('#word-import-status', 'Word export failed.', true);
+        return;
+      }
+      downloadTextFile(result.content, result.filename, result.mime);
+      setDataStatus('#word-import-status', `Exported ${result.count || 0} words as ${format.toUpperCase()}.`);
+    });
+
+    $('#btn-import-words').addEventListener('click', () => {
+      pendingImportMode = 'words';
+      const input = $('#import-file-input');
+      input.accept = '.json,.csv,.txt';
+      input.click();
     });
 
     $('#import-file-input').addEventListener('change', async (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file || !pendingImportMode) return;
       const text = await file.text();
-      const ok = await window.eld.importData(text);
-      if (ok) {
-        alert('Data imported successfully!');
-        allWords = await window.eld.getAllWords();
-        settings = await window.eld.getSettings();
-        renderLibrary();
-        renderStats();
-        populateSettings();
-      } else {
-        alert('Import failed. Please check the file format.');
+
+      if (pendingImportMode === 'restore-full') {
+        const result = await window.eld.restoreFullBackup(text);
+        if (result && result.success) {
+          await refreshDashboardData();
+          setDataStatus('#backup-status', `Restored full backup with ${result.words || 0} words.`);
+        } else {
+          setDataStatus('#backup-status', `Restore failed: ${result?.error || 'invalid backup file'}`, true);
+        }
+      } else if (pendingImportMode === 'words') {
+        const ext = file.name.split('.').pop().toLowerCase();
+        const result = await window.eld.importWords({ content: text, format: ext, filename: file.name });
+        if (result && result.success) {
+          await refreshDashboardData();
+          setDataStatus('#word-import-status', `Imported ${result.added || 0} new, merged ${result.merged || 0}, skipped ${result.errors || 0}.`);
+        } else {
+          setDataStatus('#word-import-status', `Import failed: ${result?.error || 'invalid word file'}`, true);
+        }
       }
+
+      pendingImportMode = null;
       e.target.value = '';
     });
 
-    // Reset
     $('#btn-reset-data').addEventListener('click', async () => {
-      if (confirm('⚠️ This will delete ALL your saved words and settings. Are you sure?')) {
-        if (confirm('This action cannot be undone. Really reset?')) {
+      if (confirm('This will delete ALL saved words and settings after creating an auto-backup. Continue?')) {
+        if (confirm('This action cannot be undone from the UI except by restoring an auto-backup. Really reset?')) {
           await window.eld.resetData();
           allWords = [];
-          settings = await window.eld.getSettings();
-          renderLibrary();
-          renderStats();
-          populateSettings();
+          await refreshDashboardData();
+          setDataStatus('#backup-status', 'Data reset. A safety backup was created.');
         }
       }
     });
@@ -870,14 +1249,13 @@
 
     $('#batch-export').addEventListener('click', async () => {
       if (selectedIds.size === 0) return;
-      const selected = allWords.filter((w) => selectedIds.has(w.id));
-      const blob = new Blob([JSON.stringify(selected, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `engilink-export-${selectedIds.size}words-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const format = ($('#batch-export-format') && $('#batch-export-format').value) || 'json';
+      const result = await window.eld.exportWords({ ids: [...selectedIds], format });
+      if (!result || !result.success) {
+        alert('Export failed.');
+        return;
+      }
+      downloadTextFile(result.content, result.filename, result.mime);
     });
   }
 
@@ -942,7 +1320,12 @@
 
   function escAttr(str) {
     if (!str) return '';
-    return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
   function formatDate(isoStr) {

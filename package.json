@@ -1,6 +1,6 @@
 {
   "name": "engilink-dictionary",
-  "version": "3.0.0",
+  "version": "3.5.0",
   "description": "EngiLink Dictionary — AI-powered multilingual translation assistant with SRS",
   "main": "main.js",
   "scripts": {
@@ -54,8 +54,11 @@
     ],
     "extraResources": [
       {
-        "from": "eng.traineddata",
-        "to": "eng.traineddata"
+        "from": ".",
+        "to": ".",
+        "filter": [
+          "*.traineddata"
+        ]
       }
     ],
     "asar": true

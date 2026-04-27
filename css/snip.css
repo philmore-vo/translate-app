@@ -14,6 +14,10 @@ html, body {
   font-family: 'Nunito', sans-serif;
 }
 
+body.preview-mode {
+  cursor: default;
+}
+
 .snip-overlay {
   position: fixed;
   inset: 0;
@@ -77,4 +81,106 @@ html, body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.snip-preview {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(620px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  transform: translate(-50%, -50%);
+  background: rgba(255, 250, 242, 0.98);
+  color: #4b3429;
+  border: 2px solid #f2b36f;
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  z-index: 30;
+  padding: 18px;
+  backdrop-filter: blur(14px);
+}
+
+.snip-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.snip-preview h1 {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0 0 4px;
+}
+
+.snip-preview p {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #846657;
+  margin: 0;
+}
+
+.snip-icon-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e0b287;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #7a5543;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+#snip-preview-text {
+  width: 100%;
+  min-height: 170px;
+  max-height: 44vh;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid #e6b98a;
+  border-radius: 10px;
+  background: #fff;
+  color: #3c2a22;
+  font: 14px/1.55 Consolas, 'Courier New', monospace;
+  outline: none;
+}
+
+#snip-preview-text:focus {
+  border-color: #ff6b6b;
+  box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.16);
+}
+
+.snip-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.snip-preview-actions button {
+  border: none;
+  border-radius: 9px;
+  padding: 9px 14px;
+  background: #ff6b6b;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.snip-preview-actions button:nth-child(2) {
+  background: #4aa3df;
+}
+
+.snip-preview-actions button:nth-child(3) {
+  background: #8b735f;
+}
+
+.snip-preview-actions button:hover,
+.snip-icon-btn:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
 }

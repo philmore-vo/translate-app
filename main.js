@@ -13,10 +13,12 @@ const crypto = require('crypto');
 const DB_DIR = path.join(app.getPath('userData'), 'engilink-db');
 const DB_FILE = path.join(DB_DIR, 'data.json');
 const DB_BACKUP = path.join(DB_DIR, 'data.backup.json');
+const DB_BACKUP_DIR = path.join(DB_DIR, 'backups');
+const MAX_AUTO_BACKUPS = 5;
 
 // ── Default data structure (V3) ──
 const DEFAULT_DATA = {
-  schemaVersion: 3,
+  schemaVersion: 5,
   words: [],
   lookupHistory: [],
   aiCache: {},
@@ -33,6 +35,10 @@ const DEFAULT_DATA = {
     overlayWidth: 380,
     overlayMaxHeight: 520,
     theme: 'light',
+    ocrLanguage: 'eng',
+    onboardingCompleted: false,
+    onboardingCompletedAt: '',
+    lastHealthCheckAt: '',
     autoSave: true,
     showRelatedWords: true,
   },
@@ -99,6 +105,27 @@ function migrateDatabase(data) {
     console.log('📦 Migrated database to schema v3');
   }
 
+  if (version < 4) {
+    if (data.settings.onboardingCompleted === undefined) {
+      data.settings.onboardingCompleted = false;
+    }
+    if (!data.settings.onboardingCompletedAt) {
+      data.settings.onboardingCompletedAt = '';
+    }
+    data.schemaVersion = 4;
+    changed = true;
+    console.log('Migrated database to schema v4');
+  }
+
+  if (version < 5) {
+    if (!data.settings.lastHealthCheckAt) {
+      data.settings.lastHealthCheckAt = '';
+    }
+    data.schemaVersion = 5;
+    changed = true;
+    console.log('Migrated database to schema v5');
+  }
+
   return { data, changed };
 }
 
@@ -116,6 +143,94 @@ function buildCacheKey(text, isPhrase, targetLang, endpoint, model) {
 function getLocalDateStr(date) {
   const d = date || new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function cloneData(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+
+function normalizeDatabaseShape(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Invalid database file');
+  }
+  if (!data.settings || typeof data.settings !== 'object' || Array.isArray(data.settings)) data.settings = {};
+  data.settings = {
+    ...DEFAULT_DATA.settings,
+    ...data.settings,
+    hotkeys: { ...DEFAULT_DATA.settings.hotkeys, ...(data.settings.hotkeys || {}) },
+  };
+  if (!Array.isArray(data.words)) data.words = [];
+  if (!data.stats || typeof data.stats !== 'object' || Array.isArray(data.stats)) data.stats = {};
+  data.stats = { ...DEFAULT_DATA.stats, ...data.stats };
+  if (!Array.isArray(data.lookupHistory)) data.lookupHistory = [];
+  if (!data.aiCache || typeof data.aiCache !== 'object' || Array.isArray(data.aiCache)) data.aiCache = {};
+  return migrateDatabase(data).data;
+}
+
+function ensureBackupDir() {
+  ensureDbDir();
+  if (!fs.existsSync(DB_BACKUP_DIR)) {
+    fs.mkdirSync(DB_BACKUP_DIR, { recursive: true });
+  }
+}
+
+function safeBackupReason(reason) {
+  return String(reason || 'manual').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'manual';
+}
+
+function backupTimestamp() {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+function getBackupMeta(filePath) {
+  const stat = fs.statSync(filePath);
+  return {
+    name: path.basename(filePath),
+    path: filePath,
+    size: stat.size,
+    createdAt: stat.mtime.toISOString(),
+  };
+}
+
+function listAutoBackups() {
+  ensureBackupDir();
+  return fs.readdirSync(DB_BACKUP_DIR)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => getBackupMeta(path.join(DB_BACKUP_DIR, name)))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function pruneAutoBackups() {
+  const backups = listAutoBackups();
+  for (const backup of backups.slice(MAX_AUTO_BACKUPS)) {
+    try {
+      fs.unlinkSync(backup.path);
+    } catch (err) {
+      console.error('Failed to prune backup:', backup.name, err.message);
+    }
+  }
+}
+
+function createAutoBackup(reason) {
+  ensureBackupDir();
+  if (!fs.existsSync(DB_FILE)) return null;
+  const fileName = `data.${backupTimestamp()}.${safeBackupReason(reason)}.json`;
+  const filePath = path.join(DB_BACKUP_DIR, fileName);
+  fs.copyFileSync(DB_FILE, filePath);
+  pruneAutoBackups();
+  return getBackupMeta(filePath);
+}
+
+function resolveBackupPath(name) {
+  const safeName = path.basename(String(name || ''));
+  if (!safeName || !safeName.endsWith('.json')) {
+    throw new Error('Invalid backup file name');
+  }
+  const filePath = path.join(DB_BACKUP_DIR, safeName);
+  if (!fs.existsSync(filePath)) {
+    throw new Error('Backup file not found');
+  }
+  return filePath;
 }
 
 let tray = null;
@@ -198,6 +313,474 @@ function saveDatabase(data) {
 /* ══════════════════════════════════════════════
    DICTIONARY API (Main Process — avoid CORS)
    ══════════════════════════════════════════════ */
+
+function restoreFullBackupJson(jsonStr, reason) {
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const data = normalizeDatabaseShape(parsed);
+    const backup = createAutoBackup(reason || 'restore-full');
+    const success = saveDatabase(data);
+    return {
+      success,
+      backup,
+      words: Array.isArray(data.words) ? data.words.length : 0,
+      history: Array.isArray(data.lookupHistory) ? data.lookupHistory.length : 0,
+    };
+  } catch (err) {
+    console.error('Restore failed:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+function getAppHealthCheck() {
+  const db = loadDatabase();
+  let backups = [];
+  let backupError = '';
+
+  try {
+    backups = listAutoBackups();
+  } catch (err) {
+    backupError = err.message;
+  }
+
+  const ocrLang = db.settings.ocrLanguage || 'eng';
+  const ocrLangPath = typeof getOcrLangPath === 'function' ? getOcrLangPath() : __dirname;
+  const ocrDataPath = path.join(ocrLangPath, `${ocrLang}.traineddata`);
+  const hotkeys = db.settings.hotkeys || {};
+  const checks = [];
+
+  const addCheck = (id, label, status, detail) => {
+    checks.push({ id, label, status, detail });
+  };
+
+  addCheck(
+    'database',
+    'Database',
+    fs.existsSync(DB_FILE) ? 'ok' : 'warn',
+    fs.existsSync(DB_FILE) ? `Ready at ${DB_FILE}` : 'Database file will be created after the first save.'
+  );
+
+  addCheck(
+    'library',
+    'Library',
+    db.words.length > 0 ? 'ok' : 'warn',
+    `${db.words.length} saved word${db.words.length === 1 ? '' : 's'}.`
+  );
+
+  addCheck(
+    'api',
+    'AI Settings',
+    db.settings.apiKey ? 'ok' : 'warn',
+    db.settings.apiKey ? `Model: ${db.settings.model}` : 'API key is missing. Lookup still opens, but AI explanations will fail.'
+  );
+
+  let endpointOk = false;
+  try {
+    const endpoint = new URL(db.settings.apiEndpoint || '');
+    endpointOk = endpoint.protocol === 'https:' || endpoint.protocol === 'http:';
+  } catch {
+    endpointOk = false;
+  }
+  addCheck(
+    'endpoint',
+    'API Endpoint',
+    endpointOk ? 'ok' : 'error',
+    endpointOk ? db.settings.apiEndpoint : 'Endpoint is not a valid URL.'
+  );
+
+  addCheck(
+    'ocr',
+    'OCR Language Data',
+    fs.existsSync(ocrDataPath) ? 'ok' : 'warn',
+    fs.existsSync(ocrDataPath)
+      ? `${ocrLang}.traineddata found.`
+      : `${ocrLang}.traineddata is missing from ${ocrLangPath}.`
+  );
+
+  addCheck(
+    'backup',
+    'Auto Backup',
+    backups.length > 0 ? 'ok' : 'warn',
+    backupError || (backups.length > 0 ? `${backups.length} auto-backup file${backups.length === 1 ? '' : 's'} kept.` : 'No auto-backup yet.')
+  );
+
+  addCheck(
+    'hotkeys',
+    'Hotkeys',
+    hotkeys.lookup ? 'ok' : 'warn',
+    `Lookup: ${hotkeys.lookup || 'not set'} | Spotlight: ${hotkeys.spotlight || 'not set'} | OCR: ${hotkeys.ocr || 'not set'}`
+  );
+
+  const overall = checks.some((c) => c.status === 'error')
+    ? 'error'
+    : checks.some((c) => c.status === 'warn')
+      ? 'warn'
+      : 'ok';
+
+  db.settings.lastHealthCheckAt = new Date().toISOString();
+  saveDatabase(db);
+
+  return {
+    success: true,
+    overall,
+    generatedAt: db.settings.lastHealthCheckAt,
+    appVersion: app.getVersion(),
+    schemaVersion: db.schemaVersion || DEFAULT_DATA.schemaVersion,
+    dbPath: DB_FILE,
+    backupDir: DB_BACKUP_DIR,
+    wordCount: db.words.length,
+    historyCount: db.lookupHistory.length,
+    cacheCount: Object.keys(db.aiCache || {}).length,
+    checks,
+  };
+}
+
+function normalizeWordKey(word) {
+  return String(word || '').trim().toLowerCase();
+}
+
+function toArrayList(value) {
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  if (typeof value === 'string') {
+    return value.split(/[;,|]/).map((v) => v.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function toBool(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') return ['true', '1', 'yes', 'y'].includes(value.trim().toLowerCase());
+  return false;
+}
+
+function firstDefinition(word) {
+  for (const meaning of word.meanings || []) {
+    for (const def of meaning.definitions || []) {
+      if (def && def.definition) return def.definition;
+    }
+  }
+  return word.technicalNote || '';
+}
+
+function normalizeImportedWord(raw) {
+  const source = typeof raw === 'string' ? { word: raw } : raw;
+  if (!source || typeof source !== 'object') return null;
+  const word = String(source.word || source.term || source.text || '').trim();
+  if (!word) return null;
+
+  const now = new Date().toISOString();
+  const translatedMeaning = String(
+    source.translatedMeaning || source.translation || source.vietnameseMeaning || source.meaning || ''
+  ).trim();
+  const technicalNote = String(source.technicalNote || source.definition || source.note || '').trim();
+  const relatedTerms = toArrayList(source.relatedTerms || source.tags || source.related);
+  const meanings = Array.isArray(source.meanings)
+    ? source.meanings
+    : (technicalNote ? [{
+      partOfSpeech: source.partOfSpeech || '',
+      definitions: [{ definition: technicalNote, example: source.example || '' }],
+      synonyms: toArrayList(source.synonyms),
+      antonyms: toArrayList(source.antonyms),
+    }] : []);
+
+  return {
+    id: source.id || crypto.randomUUID(),
+    word,
+    phonetic: source.phonetic || '',
+    audioUrl: source.audioUrl || '',
+    meanings,
+    technicalNote,
+    translatedMeaning,
+    vietnameseMeaning: source.vietnameseMeaning || translatedMeaning,
+    topic: source.topic || '',
+    tags: toArrayList(source.tags || relatedTerms),
+    relatedTerms,
+    userNote: source.userNote || source.personalNote || '',
+    isFavorite: toBool(source.isFavorite),
+    lookupCount: Number(source.lookupCount) || 1,
+    firstLookup: source.firstLookup || now,
+    lastLookup: source.lastLookup || now,
+    isPhrase: source.isPhrase !== undefined ? Boolean(source.isPhrase) : word.split(/\s+/).length > 1,
+    easeFactor: Number(source.easeFactor) || 2.5,
+    interval: Number(source.interval) || 0,
+    repetitions: Number(source.repetitions) || 0,
+    dueDate: source.dueDate || null,
+  };
+}
+
+function mergeImportedWord(existing, incoming) {
+  const merged = { ...existing };
+  const fillFields = [
+    'phonetic', 'audioUrl', 'technicalNote', 'translatedMeaning', 'vietnameseMeaning',
+    'topic', 'firstLookup', 'lastLookup',
+  ];
+  for (const field of fillFields) {
+    if (!merged[field] && incoming[field]) merged[field] = incoming[field];
+  }
+  if ((!merged.meanings || merged.meanings.length === 0) && incoming.meanings && incoming.meanings.length) {
+    merged.meanings = incoming.meanings;
+  }
+  if ((!merged.tags || merged.tags.length === 0) && incoming.tags && incoming.tags.length) {
+    merged.tags = incoming.tags;
+  }
+  if ((!merged.relatedTerms || merged.relatedTerms.length === 0) && incoming.relatedTerms && incoming.relatedTerms.length) {
+    merged.relatedTerms = incoming.relatedTerms;
+  }
+  if (!merged.userNote && incoming.userNote) merged.userNote = incoming.userNote;
+  if (merged.isFavorite === undefined) merged.isFavorite = incoming.isFavorite || false;
+  if (!merged.lookupCount && incoming.lookupCount) merged.lookupCount = incoming.lookupCount;
+  if (merged.easeFactor === undefined) merged.easeFactor = incoming.easeFactor || 2.5;
+  if (merged.interval === undefined) merged.interval = incoming.interval || 0;
+  if (merged.repetitions === undefined) merged.repetitions = incoming.repetitions || 0;
+  if (merged.dueDate === undefined) merged.dueDate = incoming.dueDate || null;
+  return merged;
+}
+
+function csvEscape(value) {
+  const text = String(value === undefined || value === null ? '' : value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function wordsToCsv(words) {
+  const headers = ['word', 'translatedMeaning', 'definition', 'topic', 'phonetic', 'relatedTerms', 'userNote', 'isFavorite', 'lookupCount'];
+  const rows = words.map((w) => [
+    w.word,
+    w.translatedMeaning || w.vietnameseMeaning || '',
+    firstDefinition(w),
+    w.topic || '',
+    w.phonetic || '',
+    (w.relatedTerms || w.tags || []).join('; '),
+    w.userNote || '',
+    w.isFavorite ? 'true' : 'false',
+    w.lookupCount || 0,
+  ].map(csvEscape).join(','));
+  return [headers.join(','), ...rows].join('\r\n');
+}
+
+function wordsToAnki(words) {
+  return words.map((w) => [
+    w.word,
+    w.translatedMeaning || w.vietnameseMeaning || '',
+    firstDefinition(w),
+    w.topic || '',
+  ].map((v) => String(v || '').replace(/[\t\r\n]+/g, ' ').trim()).join('\t')).join('\r\n');
+}
+
+function parseDelimitedText(text, delimiter) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (ch === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && ch === delimiter) {
+      row.push(cell);
+      cell = '';
+      continue;
+    }
+
+    if (!inQuotes && (ch === '\n' || ch === '\r')) {
+      if (ch === '\r' && next === '\n') i++;
+      row.push(cell);
+      if (row.some((v) => v.trim() !== '')) rows.push(row);
+      row = [];
+      cell = '';
+      continue;
+    }
+
+    cell += ch;
+  }
+
+  row.push(cell);
+  if (row.some((v) => v.trim() !== '')) rows.push(row);
+  return rows;
+}
+
+function rowsToImportedWords(rows, delimiterName) {
+  if (!rows.length) return { words: [], errors: 0 };
+
+  const header = rows[0].map((v) => v.trim().toLowerCase());
+  const hasHeader = header.some((h) => ['word', 'term', 'text'].includes(h));
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+  const indexOf = (names, fallback) => {
+    for (const name of names) {
+      const idx = header.indexOf(name);
+      if (idx >= 0) return idx;
+    }
+    return fallback;
+  };
+
+  const map = hasHeader ? {
+    word: indexOf(['word', 'term', 'text'], 0),
+    translatedMeaning: indexOf(['translatedmeaning', 'translation', 'vietnamesemeaning', 'meaning'], 1),
+    definition: indexOf(['definition', 'technicalnote', 'note'], 2),
+    topic: indexOf(['topic'], 3),
+    phonetic: indexOf(['phonetic'], 4),
+    relatedTerms: indexOf(['relatedterms', 'related', 'tags'], 5),
+    userNote: indexOf(['usernote', 'personalnote'], 6),
+    isFavorite: indexOf(['isfavorite', 'favorite'], 7),
+    lookupCount: indexOf(['lookupcount'], 8),
+  } : {
+    word: 0,
+    translatedMeaning: 1,
+    definition: 2,
+    topic: 3,
+    phonetic: 4,
+    relatedTerms: 5,
+    userNote: 6,
+    isFavorite: 7,
+    lookupCount: 8,
+  };
+
+  const words = [];
+  let errors = 0;
+  for (const row of dataRows) {
+    const imported = normalizeImportedWord({
+      word: row[map.word],
+      translatedMeaning: row[map.translatedMeaning],
+      definition: row[map.definition],
+      topic: row[map.topic],
+      phonetic: row[map.phonetic],
+      relatedTerms: row[map.relatedTerms],
+      userNote: row[map.userNote],
+      isFavorite: row[map.isFavorite],
+      lookupCount: row[map.lookupCount],
+    });
+    if (imported) words.push(imported);
+    else if (row.some((v) => String(v || '').trim())) errors++;
+  }
+
+  if (delimiterName === 'anki') {
+    words.forEach((w) => { if (!w.topic) w.topic = 'Imported'; });
+  }
+  return { words, errors };
+}
+
+function parseWordImport(content, format, filename) {
+  const ext = path.extname(filename || '').replace('.', '').toLowerCase();
+  const fmt = String(format || ext || 'json').toLowerCase();
+
+  if (fmt === 'json') {
+    const parsed = JSON.parse(content);
+    const source = Array.isArray(parsed) ? parsed : parsed.words;
+    if (!Array.isArray(source)) throw new Error('JSON must be a word array or an object with words[]');
+    const words = [];
+    let errors = 0;
+    for (const item of source) {
+      const imported = normalizeImportedWord(item);
+      if (imported) words.push(imported);
+      else errors++;
+    }
+    return { words, errors };
+  }
+
+  if (fmt === 'csv') {
+    return rowsToImportedWords(parseDelimitedText(content, ','), 'csv');
+  }
+
+  if (fmt === 'txt' || fmt === 'anki' || fmt === 'tsv') {
+    return rowsToImportedWords(parseDelimitedText(content, '\t'), 'anki');
+  }
+
+  throw new Error(`Unsupported import format: ${fmt}`);
+}
+
+function importWordsIntoDatabase(content, format, filename) {
+  try {
+    const { words, errors } = parseWordImport(content, format, filename);
+    if (!words.length) {
+      return { success: false, error: 'No valid words found', added: 0, merged: 0, errors };
+    }
+
+    const db = loadDatabase();
+    const backup = createAutoBackup('word-import');
+    const existingByKey = new Map(db.words.map((w, idx) => [normalizeWordKey(w.word), idx]));
+    const existingIds = new Set(db.words.map((w) => w.id).filter(Boolean));
+    const existingCount = db.words.length;
+    const newWords = [];
+    let added = 0;
+    let merged = 0;
+
+    for (const incoming of words) {
+      const key = normalizeWordKey(incoming.word);
+      if (!key) continue;
+      if (existingByKey.has(key)) {
+        const idx = existingByKey.get(key);
+        if (idx < existingCount) {
+          db.words[idx] = mergeImportedWord(db.words[idx], incoming);
+        } else {
+          const newIdx = idx - existingCount;
+          newWords[newIdx] = mergeImportedWord(newWords[newIdx], incoming);
+        }
+        merged++;
+      } else {
+        if (!incoming.id || existingIds.has(incoming.id)) incoming.id = crypto.randomUUID();
+        existingIds.add(incoming.id);
+        existingByKey.set(key, existingCount + newWords.length);
+        newWords.push(incoming);
+        added++;
+      }
+    }
+
+    db.words = [...newWords, ...db.words];
+    const success = saveDatabase(db);
+    return { success, added, merged, errors, total: words.length, backup };
+  } catch (err) {
+    console.error('Word import failed:', err.message);
+    return { success: false, error: err.message, added: 0, merged: 0, errors: 0 };
+  }
+}
+
+function exportWordsFromDatabase(options = {}) {
+  const db = loadDatabase();
+  const ids = Array.isArray(options.ids) ? new Set(options.ids) : null;
+  const words = ids && ids.size > 0 ? db.words.filter((w) => ids.has(w.id)) : db.words;
+  const format = String(options.format || 'json').toLowerCase();
+  const date = new Date().toISOString().split('T')[0];
+  const suffix = ids && ids.size > 0 ? `${words.length}words` : 'all-words';
+
+  if (format === 'csv') {
+    return {
+      success: true,
+      content: wordsToCsv(words),
+      filename: `engilink-${suffix}-${date}.csv`,
+      mime: 'text/csv',
+      count: words.length,
+    };
+  }
+
+  if (format === 'anki' || format === 'txt') {
+    return {
+      success: true,
+      content: wordsToAnki(words),
+      filename: `engilink-${suffix}-anki-${date}.txt`,
+      mime: 'text/plain',
+      count: words.length,
+    };
+  }
+
+  return {
+    success: true,
+    content: JSON.stringify(words, null, 2),
+    filename: `engilink-${suffix}-${date}.json`,
+    mime: 'application/json',
+    count: words.length,
+  };
+}
 
 function lookupDictionary(word) {
   return new Promise((resolve) => {
@@ -483,28 +1066,36 @@ function setupIPC() {
   ipcMain.handle('db:save', (event, data) => saveDatabase(data));
   ipcMain.handle('db:getPath', () => DB_FILE);
   ipcMain.handle('db:export', () => JSON.stringify(loadDatabase(), null, 2));
-  ipcMain.handle('db:import', (event, jsonStr) => {
+  ipcMain.handle('db:import', (event, jsonStr) => restoreFullBackupJson(jsonStr, 'legacy-db-import').success);
+  ipcMain.handle('db:exportFullBackup', () => ({
+    success: true,
+    content: JSON.stringify(loadDatabase(), null, 2),
+    filename: `engilink-full-backup-${new Date().toISOString().split('T')[0]}.json`,
+  }));
+  ipcMain.handle('db:restoreFullBackup', (event, jsonStr) => restoreFullBackupJson(jsonStr, 'restore-full'));
+  ipcMain.handle('db:listBackups', () => {
     try {
-      const parsed = JSON.parse(jsonStr);
-      // Normalize with defaults before migration (handle missing fields)
-      if (!parsed.settings) parsed.settings = {};
-      parsed.settings = {
-        ...DEFAULT_DATA.settings,
-        ...parsed.settings,
-        hotkeys: { ...DEFAULT_DATA.settings.hotkeys, ...(parsed.settings.hotkeys || {}) },
-      };
-      if (!parsed.words) parsed.words = [];
-      if (!parsed.stats) parsed.stats = { ...DEFAULT_DATA.stats };
-      if (!parsed.lookupHistory) parsed.lookupHistory = [];
-      if (!parsed.aiCache) parsed.aiCache = {};
-      const { data } = migrateDatabase(parsed);
-      return saveDatabase(data);
-    } catch (e) {
-      console.error('Import failed:', e.message);
-      return false;
+      return { success: true, backups: listAutoBackups() };
+    } catch (err) {
+      return { success: false, error: err.message, backups: [] };
     }
   });
-  ipcMain.handle('db:reset', () => saveDatabase(JSON.parse(JSON.stringify(DEFAULT_DATA))));
+  ipcMain.handle('db:restoreAutoBackup', (event, backupName) => {
+    try {
+      const backups = listAutoBackups();
+      const selectedName = backupName || (backups[0] && backups[0].name);
+      if (!selectedName) return { success: false, error: 'No auto-backup available' };
+      const filePath = resolveBackupPath(selectedName);
+      return restoreFullBackupJson(fs.readFileSync(filePath, 'utf-8'), 'restore-auto-backup');
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+  ipcMain.handle('db:reset', () => {
+    createAutoBackup('reset-data');
+    return saveDatabase(cloneData(DEFAULT_DATA));
+  });
+  ipcMain.handle('app:healthCheck', () => getAppHealthCheck());
 
   // ── Word Lookup (orchestrates all APIs) ──
   ipcMain.handle('lookup:word', async (event, word, options = {}) => {
@@ -695,6 +1286,13 @@ function setupIPC() {
   });
 
   // ── Stats ──
+  ipcMain.handle('words:export', (event, options = {}) => exportWordsFromDatabase(options));
+
+  ipcMain.handle('words:import', (event, payload = {}) => {
+    const content = typeof payload === 'string' ? payload : payload.content;
+    return importWordsIntoDatabase(content || '', payload.format, payload.filename);
+  });
+
   ipcMain.handle('stats:get', () => {
     const db = loadDatabase();
     return {
@@ -1183,6 +1781,91 @@ ipcMain.on('spotlight:hide', () => {
 
 let snipWindow = null;
 
+const OCR_LANGUAGES = {
+  eng: 'English',
+  vie: 'Vietnamese',
+  jpn: 'Japanese',
+  kor: 'Korean',
+  chi_sim: 'Chinese Simplified',
+  fra: 'French',
+  spa: 'Spanish',
+  deu: 'German',
+  tha: 'Thai',
+};
+
+function getOcrLanguageCode() {
+  const db = loadDatabase();
+  const code = db.settings.ocrLanguage || 'eng';
+  return OCR_LANGUAGES[code] ? code : 'eng';
+}
+
+function getOcrLangPath() {
+  return app.isPackaged ? process.resourcesPath : __dirname;
+}
+
+function cleanupOcrPreviewText(text) {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function cleanupOcrLookupText(text, mode) {
+  let cleaned = String(text || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (mode === 'lookup') {
+    const firstWord = cleaned.match(/[\p{L}\p{N}][\p{L}\p{N}'_-]*/u);
+    cleaned = firstWord ? firstWord[0] : cleaned.split(/\s+/)[0] || '';
+  } else {
+    if (cleaned.length > 500) cleaned = cleaned.split(/\s+/).slice(0, 50).join(' ');
+    if (cleaned.length > 500) cleaned = cleaned.slice(0, 500).trim();
+  }
+  return cleaned;
+}
+
+function saveOcrTextToLibrary(text) {
+  const word = cleanupOcrLookupText(text, 'translate');
+  if (!word) return { success: false, error: 'No text to save' };
+
+  const db = loadDatabase();
+  const key = normalizeWordKey(word);
+  const existingIdx = db.words.findIndex((w) => normalizeWordKey(w.word) === key);
+  const now = new Date().toISOString();
+
+  if (existingIdx >= 0) {
+    db.words[existingIdx].lastLookup = now;
+    db.words[existingIdx].lookupCount = (db.words[existingIdx].lookupCount || 0) + 1;
+    if (!db.words[existingIdx].topic) db.words[existingIdx].topic = 'OCR';
+  } else {
+    db.words.unshift({
+      id: crypto.randomUUID(),
+      word,
+      phonetic: '',
+      audioUrl: '',
+      meanings: [],
+      technicalNote: 'Saved from OCR preview.',
+      translatedMeaning: '',
+      vietnameseMeaning: '',
+      topic: 'OCR',
+      tags: [],
+      relatedTerms: [],
+      userNote: '',
+      isFavorite: false,
+      lookupCount: 1,
+      firstLookup: now,
+      lastLookup: now,
+      isPhrase: word.split(/\s+/).length > 1,
+      easeFactor: 2.5,
+      interval: 0,
+      repetitions: 0,
+      dueDate: null,
+    });
+  }
+
+  return { success: saveDatabase(db), word };
+}
+
 function createSnipWindow() {
   if (snipWindow && !snipWindow.isDestroyed()) {
     snipWindow.close();
@@ -1279,12 +1962,20 @@ ipcMain.on('ocr:captureRegion', async (event, rect) => {
     const buffer = cropped.toPNG();
     console.log('🔎 Running OCR on', rect.width, 'x', rect.height, 'region...');
 
-    // Determine langPath: use bundled traineddata if available
-    const bundledLangPath = app.isPackaged
-      ? path.join(process.resourcesPath)
-      : __dirname;
+    const ocrLang = getOcrLanguageCode();
+    const bundledLangPath = getOcrLangPath();
+    const trainedDataPath = path.join(bundledLangPath, `${ocrLang}.traineddata`);
+
+    if (!fs.existsSync(trainedDataPath)) {
+      closeSnipAndNotify(
+        `OCR language data not found: ${ocrLang}.traineddata. ` +
+        'Switch OCR Language to English or add the traineddata file to the app resources.'
+      );
+      return;
+    }
 
     const ocrOptions = {
+      langPath: bundledLangPath,
       logger: (m) => {
         if (m.status === 'recognizing text') {
           console.log(`🔎 OCR progress: ${Math.round((m.progress || 0) * 100)}%`);
@@ -1292,27 +1983,22 @@ ipcMain.on('ocr:captureRegion', async (event, rect) => {
       },
     };
 
-    // Check if bundled traineddata exists for offline use
-    const trainedDataPath = path.join(bundledLangPath, 'eng.traineddata');
-    if (fs.existsSync(trainedDataPath)) {
-      ocrOptions.langPath = bundledLangPath;
-      console.log('🔎 Using bundled eng.traineddata:', trainedDataPath);
-    }
+    console.log(`🔎 Using bundled ${ocrLang}.traineddata:`, trainedDataPath);
+    const { data: { text } } = await Tesseract.recognize(buffer, ocrLang, ocrOptions);
 
-    const { data: { text } } = await Tesseract.recognize(buffer, 'eng', ocrOptions);
-
-    // Close snip window now that OCR is done
-    if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
-
-    const cleaned = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const cleaned = cleanupOcrPreviewText(text);
     console.log('🔎 OCR result:', cleaned.slice(0, 100));
 
     if (cleaned && cleaned.length > 0) {
-      // Send to overlay for translation
-      let word = cleaned;
-      if (word.length > 500) word = word.split(/\s+/).slice(0, 50).join(' ');
-      if (word.length > 500) word = word.slice(0, 500).trim();
-      showOverlay(word);
+      if (activeSnipWindow && !activeSnipWindow.isDestroyed()) {
+        activeSnipWindow.webContents.send('ocr:preview', {
+          text: cleaned,
+          languageCode: ocrLang,
+          languageName: OCR_LANGUAGES[ocrLang],
+        });
+      } else {
+        showOverlay(cleanupOcrLookupText(cleaned, 'translate'));
+      }
     } else {
       closeSnipAndNotify('No text found in the selected area. Try selecting a larger region with clearer text.');
     }
@@ -1320,6 +2006,25 @@ ipcMain.on('ocr:captureRegion', async (event, rect) => {
     console.error('❌ OCR error:', err.message);
     closeSnipAndNotify('OCR failed: ' + err.message);
   }
+});
+
+ipcMain.on('ocr:previewAction', (event, payload = {}) => {
+  const mode = payload.mode || 'translate';
+  const rawText = payload.text || '';
+  let text = cleanupOcrLookupText(rawText, mode);
+
+  if (!text) {
+    closeSnipAndNotify('No text to process. Please try OCR again.');
+    return;
+  }
+
+  if (mode === 'save') {
+    const result = saveOcrTextToLibrary(rawText);
+    if (result.success && result.word) text = result.word;
+  }
+
+  if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+  showOverlay(text);
 });
 
 function closeSnipAndNotify(message) {
