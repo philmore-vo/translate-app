@@ -1459,6 +1459,7 @@ function setupIPC() {
       'https://openrouter.ai/',
       'https://platform.openai.com/',
       'https://console.groq.com/',
+      'mailto:votrongkien1881@gmail.com',
     ];
     if (typeof url === 'string' && allowed.some((prefix) => url.startsWith(prefix))) {
       const { shell } = require('electron');

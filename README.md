@@ -1,317 +1,502 @@
-# EngiLink Dictionary
+# 📖 EngiLink Dictionary — Từ điển AI Đa ngôn ngữ trên Desktop
 
-EngiLink Dictionary la ung dung tu dien desktop cho Windows, ho tro tra tu/cum tu bang AI, hoc tu vung bang flashcard, OCR tu anh/man hinh, va quan ly thu vien tu ca nhan.
+<p align="center">
+  <strong>Tra từ trong mọi ứng dụng chỉ bằng một phím tắt. Học từ vựng bằng flashcard SRS. Đọc văn bản tiếng Anh và quét chữ từ màn hình bằng OCR.</strong>
+</p>
 
-Ung dung duoc xay bang Electron, chay nhu app desktop rieng, phu hop de dung ca nhan hoac chia se cho ban be.
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Windows" />
+  <img src="https://img.shields.io/badge/Electron-41.x-47848F?style=flat&logo=electron&logoColor=white" alt="Electron" />
+  <img src="https://img.shields.io/badge/Version-3.5.0-7c3aed?style=flat" alt="Version" />
+  <img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat" alt="License" />
+</p>
 
-## Tai va cai dat
+---
 
-### Cach 1: Cai bang installer
+## 📋 Mục lục
 
-1. Vao trang phat hanh cua project, thuong la muc **Releases** tren GitHub.
-2. Tai file `EngiLink Dictionary Setup x.x.x.exe`.
-3. Mo file `.exe` va lam theo huong dan cai dat.
-4. Neu Windows hien SmartScreen, chon **More info** -> **Run anyway** neu ban tin nguon tai.
+1. [Giới thiệu](#-giới-thiệu)
+2. [Tính năng chính](#-tính-năng-chính)
+3. [Cài đặt](#-cài-đặt)
+4. [Hướng dẫn lấy API Key miễn phí](#-hướng-dẫn-lấy-api-key-miễn-phí)
+5. [Thiết lập lần đầu](#-thiết-lập-lần-đầu)
+6. [Hướng dẫn sử dụng](#-hướng-dẫn-sử-dụng)
+7. [Phím tắt](#-phím-tắt)
+8. [Backup & Restore](#-backup--restore)
+9. [Câu hỏi thường gặp (FAQ)](#-câu-hỏi-thường-gặp-faq)
+10. [Xử lý lỗi](#-xử-lý-lỗi)
+11. [Build từ source](#-build-từ-source)
+12. [Lịch sử cập nhật](#-lịch-sử-cập-nhật)
 
-> Luu y: App tu build/local thuong chua co code signing nen Windows co the canh bao. Day la binh thuong voi app ca nhan.
+---
 
-### Cach 2: Chay tu source code
+## 🎯 Giới thiệu
 
-Yeu cau:
+**EngiLink Dictionary** là ứng dụng từ điển desktop dành cho người học tiếng Anh và các ngôn ngữ khác, kết hợp:
+
+- 🤖 **AI translation** — dịch và giải thích từ/cụm từ bằng các mô hình AI hiện đại (Gemini, Groq, OpenRouter, OpenAI…)
+- ⚡ **Hotkey toàn hệ thống** — bôi đen bất kỳ ứng dụng nào → bấm phím tắt → overlay tra từ hiện ra ngay
+- 🧠 **SRS flashcard** — học lại từ vựng theo thuật toán SM-2 (Anki-style)
+- 📷 **OCR màn hình** — quét vùng có chữ trên ảnh/PDF/video → tra trực tiếp
+- 📚 **Reading Mode** — dán đoạn văn vào app để đọc và tra từ inline
+- 💾 **Lưu trữ cục bộ** — toàn bộ dữ liệu nằm trên máy bạn, có backup/restore an toàn
+
+> 💡 **Ai nên dùng?** Sinh viên, dân kỹ thuật, người đọc tài liệu/sách tiếng Anh thường xuyên — bất kỳ ai cần một công cụ tra từ nhanh, có ngữ cảnh và biết học theo thời gian.
+
+---
+
+## ✨ Tính năng chính
+
+| Tính năng | Mô tả |
+|-----------|-------|
+| 🔤 **AI Translation** | Dịch từ/cụm từ kèm giải thích, ví dụ, related words, tech note |
+| ⌨️ **Hotkey Lookup** | `Ctrl + Shift + Z` để tra từ đang bôi đen ở bất kỳ app nào |
+| 🔍 **Spotlight Search** | `Ctrl + Shift + Space` để mở thanh tìm nhanh |
+| 📷 **OCR Capture** | `Ctrl + Shift + X` để quét chữ từ vùng màn hình |
+| 📖 **Reading Mode** | Dán đoạn văn → click từng từ để tra inline bằng overlay |
+| 📚 **Library** | Lưu từ đã tra, ghi chú cá nhân, phân loại theo topic |
+| 🎓 **Study (SRS)** | Học flashcard theo thuật toán SM-2, có Again/Hard/Good/Easy |
+| 📜 **History** | Timeline các lần tra gần đây, click để mở lại overlay |
+| 🔊 **Pronunciation** | Phát âm online (audio API) + offline TTS fallback |
+| 🌙 **Dark Mode** | Giao diện tối/sáng cho Dashboard, Overlay và Spotlight |
+| 📊 **Statistics** | Activity heatmap kiểu GitHub, thống kê tiến độ học |
+| 💾 **Backup / Restore** | Export full database, auto-backup trước thao tác lớn |
+| 📦 **Import / Export** | Hỗ trợ JSON, CSV, Anki TXT |
+| 🩺 **Health Check** | Tự kiểm tra database, API, OCR, hotkeys, backup |
+
+---
+
+## 🚀 Cài đặt
+
+### Cách 1: Cài bằng installer (khuyến nghị)
+
+1. Vào mục **Releases** trên repository: <https://github.com/philmore-vo/translate-app/releases>
+2. Tải file **`EngiLink Dictionary Setup x.x.x.exe`**
+3. Mở file `.exe` và làm theo wizard cài đặt
+4. Nếu Windows hiện **SmartScreen**, chọn **More info** → **Run anyway** (app cá nhân chưa có code signing — đây là tình trạng bình thường)
+
+> 💡 Sau khi cài, app sẽ có shortcut trên Desktop và Start Menu với tên **EngiLink Dictionary**.
+
+### Cách 2: Chạy từ source code
+
+**Yêu cầu:**
 
 - Windows 10/11
-- Node.js
-- npm
+- [Node.js](https://nodejs.org) (LTS)
+- npm (cài kèm Node.js)
 
-Lenh chay:
+**Các bước:**
 
 ```bash
+# 1. Clone repo
+git clone https://github.com/philmore-vo/translate-app.git
+cd translate-app
+
+# 2. Cài thư viện
 npm install
+
+# 3. Chạy app
 npm start
 ```
 
-Build installer:
+Hoặc click đúp vào `setup.bat` để cài tự động, rồi `start-app.bat` để chạy.
+
+---
+
+## 🔑 Hướng dẫn lấy API Key miễn phí
+
+App cần API key OpenAI-compatible để dùng tính năng AI. Dưới đây là các lựa chọn **miễn phí**, sắp xếp theo độ ổn định:
+
+### Tùy chọn 1: Groq (Miễn phí, cực nhanh) ⭐⭐
+
+Groq dùng phần cứng LPU riêng → tốc độ phản hồi rất nhanh, ít giới hạn.
+
+1. Vào [console.groq.com/keys](https://console.groq.com/keys)
+2. Đăng nhập bằng tài khoản Google
+3. Nhấn **Create API Key** → đặt tên (ví dụ: "EngiLink") → copy key bắt đầu bằng `gsk_...`
+4. Trong app: **Settings → AI Configuration**
+   - **API Key:** paste key vừa copy
+   - **API Endpoint:** `https://api.groq.com/openai/v1`
+   - **Model:** `llama-3.3-70b-versatile`
+5. Nhấn **Test Connection** → **Save Settings**
+
+### Tùy chọn 2: Google Gemini ⭐
+
+Gemini có quota miễn phí rộng rãi (~1500 request/ngày), chất lượng tốt với từ vựng.
+
+1. Vào [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+2. Đăng nhập Google → nhấn **Create API Key** → copy key bắt đầu bằng `AIza...`
+3. Trong app: **Settings → AI Configuration**
+   - **API Key:** paste key
+   - **API Endpoint:** `https://generativelanguage.googleapis.com/v1beta/openai`
+   - **Model:** `gemini-2.0-flash`
+4. Nhấn **Test Connection** → **Save Settings**
+
+### Tùy chọn 3: OpenRouter (Aggregator nhiều model)
+
+OpenRouter cho phép dùng nhiều model qua một key duy nhất, có model free.
+
+1. Vào [openrouter.ai/keys](https://openrouter.ai/keys) → tạo key bắt đầu bằng `sk-or-...`
+2. Trong app: **Settings → AI Configuration**
+   - **API Endpoint:** `https://openrouter.ai/api/v1`
+   - **Model:** `google/gemini-2.0-flash-exp:free` (hoặc model bất kỳ trên OpenRouter)
+
+### Tùy chọn 4: OpenAI (Trả phí)
+
+Phù hợp khi cần chất lượng cao nhất.
+
+- **API Endpoint:** `https://api.openai.com/v1`
+- **Model:** `gpt-4o-mini` (rẻ) hoặc `gpt-4o` (mạnh hơn)
+
+### Bảng so sánh
+
+| Dịch vụ | Miễn phí? | Tốc độ | Ghi chú |
+|---------|-----------|--------|---------|
+| **Groq** | ✅ Có | ⚡⚡ Rất nhanh | Giới hạn ~30 req/phút |
+| **Gemini** | ✅ Có | ⚡ Nhanh | ~1500 req/ngày |
+| **OpenRouter** | ✅ Có (model free) | ⚡ Tùy model | Tổng hợp nhiều model |
+| **OpenAI** | ❌ Trả phí | ⚡ Nhanh | Chất lượng cao nhất |
+
+---
+
+## ⚙️ Thiết lập lần đầu
+
+Khi mở app lần đầu, **Onboarding Wizard** sẽ hướng dẫn bạn 3 bước:
+
+1. **Setup AI** — paste API key + chọn model (xem mục trên)
+2. **Try a workflow** — thử Reading Mode hoặc OCR với dữ liệu mẫu
+3. **Backup** — tạo backup an toàn trước khi dùng thật
+
+Sau khi onboarding, vào **Settings** để hoàn thiện:
+
+- **Target Language:** ngôn ngữ đích bạn muốn dịch sang (Vietnamese, Japanese, Korean…)
+- **Hotkeys:** đổi phím tắt nếu trùng với app khác
+- **OCR Language:** mặc định English (offline). Có thể thêm `vie.traineddata`, `jpn.traineddata`… vào thư mục resources
+
+> 💡 Sau khi đổi key/model, luôn bấm **🧪 Test Connection** trước khi save.
+
+---
+
+## 📖 Hướng dẫn sử dụng
+
+### 1. Tra từ bằng hotkey (cách dùng phổ biến nhất)
+
+1. Bôi đen từ/cụm từ ở bất kỳ ứng dụng nào (browser, PDF, Word…)
+2. Bấm `Ctrl + Shift + Z`
+3. Overlay nhỏ hiện ra với:
+   - 🌐 Bản dịch + giải thích AI
+   - 📚 Định nghĩa từ điển
+   - 🔊 Phát âm
+   - 🔗 Related words / synonyms (click để tra tiếp)
+   - 💾 Nút **Save Word** để lưu vào Library
+
+### 2. Spotlight Search
+
+- Bấm `Ctrl + Shift + Space`
+- Gõ từ/cụm từ → `Enter` → overlay hiện kết quả
+
+### 3. OCR màn hình
+
+- Bấm `Ctrl + Shift + X`
+- Kéo chọn vùng có chữ trên màn hình
+- Sau khi nhận chữ, app hiện **OCR Preview** để bạn sửa text trước khi:
+  - **Lookup Word** — tra từ đầu tiên
+  - **Translate Text** — dịch cả đoạn
+  - **Save to Library** — lưu vào thư viện
+
+### 4. Reading Mode
+
+Dùng khi muốn đọc một bài/đoạn tiếng Anh:
+
+1. Vào trang **Reading**
+2. Dán đoạn văn vào ô bên trái → bấm **Process Text**
+3. Click vào bất kỳ từ nào để mở overlay tra (không phải chuyển trang)
+4. Từ đã có trong Library sẽ được **highlight**
+5. Dùng **Save Word** / **Save Phrase** để lưu nhanh
+6. Dùng **Explain Sentence** / **Translate Paragraph** để hiểu cả câu/đoạn
+
+### 5. Library
+
+Trang lưu tất cả từ đã tra:
+
+- 🔍 Tìm kiếm + lọc theo topic
+- 📝 Thêm note cá nhân (auto-save)
+- 🔊 Phát âm
+- 🔗 Click related word để mở overlay
+- ☑️ Chọn nhiều từ → xóa hoặc export hàng loạt
+
+### 6. Study (Flashcard SRS)
+
+Học lại từ theo thuật toán SM-2:
+
+1. Chọn topic (hoặc **All Topics**)
+2. Chọn số lượng từ (1–20)
+3. Bấm **Start Review**
+4. Chấm điểm: `Again` / `Hard` / `Good` / `Easy` — app sẽ tính toán ngày ôn tiếp theo
+5. Click related word khi đang học → overlay mở mà không làm mất tiến trình
+
+### 7. History & Statistics
+
+- **History:** timeline các lần tra gần đây, click word chip để mở lại overlay
+- **Statistics:** activity heatmap kiểu GitHub, hiển thị độ đều đặn học tập
+
+---
+
+## ⌨️ Phím tắt
+
+| Phím tắt | Chức năng |
+|----------|-----------|
+| `Ctrl + Shift + Z` | Tra từ đang bôi đen (toàn hệ thống) |
+| `Ctrl + Shift + Space` | Mở Spotlight search |
+| `Ctrl + Shift + X` | OCR vùng màn hình |
+| `Esc` | Đóng overlay / popup |
+
+> 💡 Có thể đổi tất cả hotkey trong **Settings → Hotkeys** nếu trùng với app khác.
+
+---
+
+## 💾 Backup & Restore
+
+Database lưu cục bộ tại thư mục `userData` của Electron. Đường dẫn cụ thể hiện ở:
+
+```text
+Settings → Data Management → Database
+```
+
+### Trong **Settings → Data Management**:
+
+| Thao tác | Mô tả |
+|----------|-------|
+| **Export Full Backup** | Xuất toàn bộ database ra file `.json` |
+| **Restore Full Backup** | Khôi phục từ file backup |
+| **Restore Latest Auto-Backup** | Khôi phục bản auto-backup gần nhất |
+| **Export All Words** | Xuất từ vựng theo `JSON` / `CSV` / `Anki TXT` |
+| **Import Words** | Nhập danh sách từ từ `.json`, `.csv`, `.txt` |
+
+### 🛡️ Auto-backup an toàn
+
+App **tự tạo safety backup** trước các thao tác lớn (restore, reset, import). Giữ tối đa **5 bản auto-backup** gần nhất → bạn có thể rollback nếu lỡ tay.
+
+### 🩺 Health Check
+
+Vào **Settings → Health Check → Run Health Check** để kiểm tra nhanh:
+
+- ✅ Database & schema
+- ✅ Library có dữ liệu
+- ✅ API key / model / endpoint
+- ✅ OCR traineddata cho ngôn ngữ đang chọn
+- ✅ Auto-backup
+- ✅ Hotkeys
+
+Có thể **Export Health Report** ra `.json` khi cần debug hoặc chia sẻ tình trạng app.
+
+---
+
+## ❓ Câu hỏi thường gặp (FAQ)
+
+### "Dữ liệu của tôi lưu ở đâu?"
+
+Database SQLite nằm trong thư mục `userData` của Electron (xem đường dẫn cụ thể tại **Settings → Data Management → Database**). Dữ liệu **không bị mất** khi tắt app, restart máy, hoặc cập nhật version.
+
+### "Có cần mạng để dùng app không?"
+
+| Tính năng | Cần mạng? |
+|-----------|-----------|
+| AI translation, Reading explain | ✅ Có |
+| Pronunciation (audio API) | ✅ Có |
+| OCR (offline tiếng Anh) | ❌ Không |
+| Library / Study / History | ❌ Không |
+| Offline TTS fallback | ❌ Không |
+
+App có cache AI offline → từ đã tra rồi không gọi lại API.
+
+### "API key có bị gửi đi đâu không?"
+
+API key được lưu **chỉ trên máy bạn**. Khi tra từ, app gửi request trực tiếp tới endpoint AI mà bạn cấu hình (Groq / Gemini / OpenAI…) — không qua server trung gian.
+
+### "App có chạy trên Mac/Linux không?"
+
+Hiện tại installer build cho **Windows**. Source code có thể chạy trên Mac/Linux thông qua `npm start`, nhưng OCR và một số hotkey cần điều chỉnh thêm.
+
+### "Làm sao để học hiệu quả?"
+
+1. **Tra từ trực tiếp trong ngữ cảnh** (hotkey hoặc Reading Mode) thay vì gõ tay
+2. **Thêm note cá nhân** mỗi khi save từ → giúp nhớ lâu hơn
+3. **Học flashcard hằng ngày** ở trang Study (10–15 phút/ngày)
+4. **Export sang Anki TXT** nếu muốn đồng bộ với Anki
+
+---
+
+## 🔧 Xử lý lỗi
+
+### Lỗi "API error 429: Rate limit exceeded"
+
+**Nguyên nhân:** Hết quota AI miễn phí.
+
+**Cách khắc phục:**
+
+1. **Đợi 1–2 phút** (nếu là lỗi per-minute)
+2. **Đợi đến ngày mai** (nếu là lỗi daily quota)
+3. **Đổi sang Groq** (xem [Tùy chọn 1](#tùy-chọn-1-groq-miễn-phí-cực-nhanh-))
+4. **Tạo key mới** ở provider khác
+
+### Lỗi "API error 401: Invalid API key"
+
+API key sai/hết hạn → mở **Settings**, kiểm tra lại key, hoặc tạo mới.
+
+### Windows SmartScreen chặn installer
+
+Chọn **More info** → **Run anyway**. Đây là do app cá nhân chưa có code signing certificate, không phải virus.
+
+### OCR không nhận được chữ
+
+- Chọn vùng **lớn hơn và rõ hơn**
+- Đảm bảo có file `eng.traineddata` trong thư mục resources
+- Nếu OCR ngôn ngữ khác, thêm file `*.traineddata` tương ứng (xem mục Build từ source)
+
+### Hotkey bị trùng với app khác
+
+Vào **Settings → Hotkeys**, đổi phím tắt sang tổ hợp khác chưa bị app nào dùng.
+
+### Mất dữ liệu sau update
+
+Vào **Settings → Data Management → Restore Latest Auto-Backup** để khôi phục bản backup gần nhất (app giữ tối đa 5 bản).
+
+---
+
+## 🛠️ Build từ source
+
+### Build Windows installer
 
 ```bash
 npm run build
 ```
 
-Sau khi build, installer nam trong thu muc:
-
-```text
-dist/
-```
-
-## Thiet lap lan dau
-
-1. Mo app **EngiLink Dictionary**.
-2. Vao **Settings**.
-3. Nhap API key vao muc **AI Configuration**.
-4. Mac dinh app dung OpenRouter-compatible API endpoint:
-
-```text
-https://openrouter.ai/api/v1
-```
-
-5. Bam **Test Connection** de kiem tra ket noi AI.
-6. Chon ngon ngu dich o **Target Language**, vi du `Vietnamese`, `Japanese`, `Korean`.
-7. Bam **Save Settings**.
-
-## Cach dung nhanh
-
-### Tra tu bang hotkey
-
-1. Boi den tu hoac cum tu trong bat ky ung dung nao.
-2. Bam hotkey mac dinh:
-
-```text
-Ctrl + Shift + Z
-```
-
-3. Overlay nho se hien ket qua dich, giai thich, phat am, related words va tech note.
-
-### Tra nhanh bang Spotlight
-
-Hotkey mac dinh:
-
-```text
-Ctrl + Shift + Space
-```
-
-Nhap tu/cum tu, bam `Enter`, overlay se hien ket qua.
-
-### Reading Mode
-
-Trang **Reading** giup ban dan mot doan van tieng Anh vao app de doc va tra tu nhanh.
-
-- Dan text vao o ben trai, bam **Process Text**.
-- Cac tu trong doan van se co the click duoc.
-- Tu da co trong Library se duoc highlight.
-- Bam mot tu de mo overlay nho, khong can chuyen sang trang Lookup.
-- Dung **Save Word** hoac **Save Phrase** de luu nhanh vao Library.
-- Dung **Explain Sentence** hoac **Translate Paragraph** de tra cau/doan bang overlay.
-
-### OCR tu man hinh
-
-Hotkey mac dinh:
-
-```text
-Ctrl + Shift + X
-```
-
-Keo chon vung co chu tren man hinh. App se nhan dien chu bang OCR va mo overlay de tra noi dung do.
-
-Tu V3.2, sau khi OCR xong app se hien **OCR Preview**. Ban co the sua text truoc khi chon:
-
-- **Lookup Word**: tra tu dau tien trong text OCR.
-- **Translate Text**: dich ca doan/cum tu OCR.
-- **Save to Library**: luu text OCR vao thu vien va mo overlay.
-
-### Library
-
-Trang **Library** luu cac tu da tra. Ban co the:
-
-- Tim kiem tu.
-- Loc theo topic.
-- Xem chi tiet tu.
-- Them note ca nhan.
-- Phat am.
-- Bam related word de mo overlay nho.
-- Chon nhieu tu de xoa hoac export.
-
-### Study
-
-Trang **Study** dung flashcard de hoc lai tu vung.
-
-- Chon topic hoac de `All Topics`.
-- Chon so luong tu moi phien hoc, tu 1 den 20.
-- Bam **Start Review**.
-- Cham diem bang `Again`, `Hard`, `Good`, `Easy`.
-- Bam related word trong luc hoc se mo overlay nho, khong lam mat tien trinh hoc.
-
-### History
-
-Trang **History** ghi lai cac lan lookup gan day. Bam vao word chip trong history de mo overlay nho.
-
-### Backup / Restore / Import / Export
-
-Trong **Settings > Data Management**:
-
-- **Export Full Backup**: xuat toan bo database ra file `.json`.
-- **Restore Full Backup**: khoi phuc toan bo database tu file backup.
-- **Restore Latest Auto-Backup**: khoi phuc ban backup tu dong gan nhat.
-- **Export All Words**: xuat thu vien tu theo `JSON`, `CSV`, hoac `Anki TXT`.
-- **Import Words**: nhap danh sach tu tu `.json`, `.csv`, hoac `.txt`.
-
-App se tu tao safety backup truoc cac thao tac lon nhu restore, reset, import word list.
-
-### Onboarding va Health Check
-
-Tu V3.4, app co man hinh onboarding cho lan mo dau de huong dan setup API key, thu Reading/OCR, va tao backup.
-
-Tu V3.5, trong **Settings > Health Check** co nut **Run Health Check** de kiem tra nhanh:
-
-- Database va schema.
-- Library co du lieu hay chua.
-- API key/model/endpoint.
-- OCR traineddata cho ngon ngu dang chon.
-- Auto-backup.
-- Hotkeys.
-
-Co the export health report ra file `.json` khi can debug hoac chia se ban build.
-
-## Cac tinh nang chinh
-
-- AI translation cho tu va cum tu.
-- Dictionary data tu dictionary API.
-- Overlay nho khi tra bang hotkey.
-- Refresh AI trong overlay.
-- Related words va synonyms co the click de tra tiep.
-- Phat am bang audio API hoac offline TTS fallback.
-- Library luu tu da tra.
-- Personal notes cho tung tu.
-- Study flashcard voi SRS.
-- History timeline.
-- Activity heatmap.
-- Dark mode.
-- Spotlight search.
-- Reading Mode de doc doan van va tra tu inline bang overlay nho.
-- OCR screen capture.
-- Import/export/backup/restore data.
-- First-run onboarding cho nguoi moi.
-- Health Check va export diagnostics report.
-
-## Lich su cap nhat
-
-### V1.0
-
-- Ban dau cua EngiLink Dictionary.
-- Tra tu bang overlay.
-- Luu tu vao Library.
-- Dashboard co Library, Study, Statistics, Lookup, Settings.
-- Ho tro API key va model AI trong Settings.
-
-### V2.0
-
-- Offline AI cache de tranh goi API lap lai cho cung mot tu.
-- Custom hotkeys cho lookup va Spotlight.
-- Test Connection de kiem tra API key/model/endpoint.
-- Target Language de dich sang ngon ngu khac, khong chi Vietnamese.
-- Spotlight search bar.
-- History timeline.
-- SRS flashcard theo SM-2.
-- Refresh AI trong overlay.
-- Related words/synonyms co the click de lookup tiep.
-
-### V3.0
-
-- Dark Mode cho Dashboard, Overlay va Spotlight.
-- Personal word notes trong Library.
-- Auto-save note.
-- Activity heatmap trong Statistics.
-- Batch selection trong Library.
-- Batch delete/export selected words.
-- Offline TTS fallback cho phat am.
-- OCR screen capture bang `Ctrl + Shift + X`.
-- Dong goi `eng.traineddata` de OCR tieng Anh co the chay offline trong ban release.
-- Schema migration len V3.
-
-### V3.1
-
-- Full Backup va Restore trong Settings.
-- Auto-backup an toan truoc restore/reset/import.
-- Giu toi da 5 auto-backup gan nhat.
-- Export all/selected words theo JSON, CSV, Anki TXT.
-- Import word list tu JSON/CSV/TXT.
-- Merge word import theo duplicate key, khong ghi de note/SRS/favorite hien co.
-- Related/synonym trong Dashboard Lookup mo overlay nho thay vi chuyen lookup inline.
-- Library related word mo overlay nho va khong dong modal.
-- Study related word mo overlay nho va khong lam mat tien trinh hoc.
-
-### V3.2
-
-- OCR Preview sau khi quet vung man hinh.
-- Cho phep sua text OCR truoc khi tra.
-- Them mode `Lookup Word`, `Translate Text`, `Save to Library`.
-- Them setting **OCR Language**.
-- Mac dinh English OCR chay offline bang `eng.traineddata`.
-- Neu chon ngon ngu OCR khac ma thieu traineddata, app bao loi ro rang thay vi fail im lang.
-
-### V3.3
-
-- Them trang **Reading Mode**.
-- Dan doan van vao app, xu ly thanh cac tu co the click.
-- Click tu trong Reading Mode mo overlay nho nhu hotkey.
-- Highlight cac tu da ton tai trong Library.
-- Luu nhanh word hoac phrase tu doan doc vao Library.
-- Explain Sentence va Translate Paragraph bang overlay, khong lam mat ngu canh dang doc.
-
-### V3.4
-
-- Them first-run onboarding wizard.
-- Huong dan nguoi moi setup API key, thu workflow chinh, va backup du lieu.
-- Nut mo nhanh Settings tu onboarding.
-- Nut thu Reading Mode kem sample text.
-- Luu trang thai onboarding vao database schema V4.
-
-### V3.5
-
-- Them Settings > Health Check.
-- Kiem tra database, library, API settings, endpoint, OCR traineddata, backup, hotkeys.
-- Luu thoi diem health check gan nhat vao schema V5.
-- Export health report ra JSON de debug/chia se tinh trang app.
-- Version app cap nhat len `3.5.0`.
-
-## Du lieu duoc luu o dau?
-
-Database nam trong thu muc userData cua Electron. Ban co the xem duong dan truc tiep trong:
-
-```text
-Settings > Data Management > Database
-```
-
-Khi can chuyen may hoac giu an toan du lieu, hay dung **Export Full Backup**.
-
-## Build va dong goi
-
-Lenh build Windows installer:
-
-```bash
-npm run build
-```
-
-Build se tao:
+Sau khi build xong, file installer nằm tại:
 
 ```text
 dist/EngiLink Dictionary Setup x.x.x.exe
 dist/win-unpacked/
 ```
 
-OCR offline can file:
+### Build thư mục unpacked (debug nhanh)
 
-```text
-eng.traineddata
+```bash
+npm run build:dir
 ```
 
-File nay duoc cau hinh de copy vao `resources` khi build installer.
+### Thêm OCR ngôn ngữ khác
 
-Neu muon OCR ngon ngu khac, them file traineddata tuong ung vao thu muc resources/dev root, vi du:
+App build kèm sẵn `eng.traineddata` cho OCR tiếng Anh offline. Để hỗ trợ thêm ngôn ngữ:
+
+1. Tải file traineddata từ [tessdata](https://github.com/tesseract-ocr/tessdata)
+2. Đặt vào thư mục root của project (cạnh `eng.traineddata`):
 
 ```text
-vie.traineddata
-jpn.traineddata
-kor.traineddata
-chi_sim.traineddata
+vie.traineddata    # Tiếng Việt
+jpn.traineddata    # Tiếng Nhật
+kor.traineddata    # Tiếng Hàn
+chi_sim.traineddata  # Tiếng Trung giản thể
 ```
 
-## Goi y su dung
+3. Build lại installer — `electron-builder` sẽ tự copy vào `resources/`
+4. Trong app, chọn ngôn ngữ tương ứng ở **Settings → OCR Language**
 
-- Nen bam **Test Connection** sau khi doi API key/model.
-- Nen export full backup truoc khi import danh sach tu lon.
-- Nen dung CSV/Anki TXT neu muon dua tu vung sang ung dung hoc khac.
-- Neu OCR khong nhan duoc chu, hay chon vung lon hon va ro hon.
-- Neu hotkey bi trung voi app khac, doi hotkey trong Settings.
+### Cấu trúc thư mục
 
-## License
+```text
+translate-app/
+├── 📄 main.js                  ← Electron main process
+├── 📄 preload.js               ← IPC bridge cho overlay
+├── 📄 preload-dashboard.js     ← IPC bridge cho dashboard
+├── 📄 preload-spotlight.js     ← IPC bridge cho spotlight
+├── 📄 preload-snip.js          ← IPC bridge cho OCR snip
+├── 📄 dashboard.html           ← Giao diện chính (Library, Study, Settings…)
+├── 📄 overlay.html             ← Overlay tra từ
+├── 📄 spotlight.html           ← Spotlight search bar
+├── 📄 snip.html                ← OCR region selector
+├── 📄 setup.bat / start-app.bat
+├── 📄 eng.traineddata          ← OCR English (offline)
+├── 📁 css/                     ← Stylesheets
+├── 📁 js/                      ← Renderer logic (dashboard.js…)
+├── 📁 assets/                  ← Icon, tray icon, helpers
+├── 📁 scripts/                 ← electron-builder afterPack
+└── 📁 dist/                    ← Output sau khi build
+```
 
-MIT
+---
+
+## 📜 Lịch sử cập nhật
+
+### V3.5 (hiện tại)
+
+- 🩺 **Health Check** trong Settings — kiểm tra DB, library, API, OCR, backup, hotkeys
+- 📤 Export health report ra JSON để debug/chia sẻ
+- 📦 Schema migration lên V5
+
+### V3.4
+
+- 🎉 **Onboarding Wizard** lần mở đầu — hướng dẫn setup API key, thử Reading/OCR, tạo backup
+- 🔘 Nút mở nhanh Settings và Reading Mode kèm sample text
+- 📦 Schema V4 lưu trạng thái onboarding
+
+### V3.3
+
+- 📚 **Reading Mode** — dán đoạn văn → click từng từ tra inline bằng overlay nhỏ
+- 🔆 Highlight từ đã có trong Library
+- 💬 **Explain Sentence** và **Translate Paragraph** không làm mất ngữ cảnh
+
+### V3.2
+
+- 👁️ **OCR Preview** — sửa text trước khi tra
+- 🎯 Mode `Lookup Word` / `Translate Text` / `Save to Library`
+- 🌐 Setting **OCR Language** + báo lỗi rõ khi thiếu traineddata
+
+### V3.1
+
+- 💾 **Full Backup / Restore** trong Settings
+- 🔄 Auto-backup an toàn trước restore/reset/import (giữ tối đa 5 bản)
+- 📤 Export words theo JSON / CSV / Anki TXT
+- 📥 Import từ JSON / CSV / TXT, merge thông minh không ghi đè note/SRS
+- 🔗 Related word mở overlay nhỏ thay vì chuyển lookup inline
+
+### V3.0
+
+- 🌙 **Dark Mode** cho Dashboard, Overlay, Spotlight
+- 📝 Personal word notes + auto-save trong Library
+- 📊 Activity heatmap trong Statistics
+- ☑️ Batch selection + delete/export hàng loạt
+- 🔊 Offline TTS fallback
+- 📷 **OCR screen capture** (`Ctrl + Shift + X`) với `eng.traineddata` offline
+
+### V2.0
+
+- 💾 Offline AI cache — không gọi lại API cho từ đã tra
+- ⌨️ Custom hotkeys cho Lookup và Spotlight
+- 🧪 **Test Connection** kiểm tra API key/model/endpoint
+- 🌍 Target Language tùy chỉnh (không chỉ Vietnamese)
+- 🔍 Spotlight search bar
+- 📜 History timeline
+- 🎓 SRS flashcard theo SM-2
+- 🔄 Refresh AI trong overlay
+- 🔗 Related words / synonyms click để tra tiếp
+
+### V1.0
+
+- 🎉 Bản đầu tiên của EngiLink Dictionary
+- 🔤 Tra từ bằng overlay
+- 📚 Lưu từ vào Library
+- 🖥️ Dashboard với Library, Study, Statistics, Lookup, Settings
+- 🤖 Hỗ trợ API key và model AI trong Settings
+
+---
+
+## 📄 License
+
+[MIT](LICENSE) © EngiLink
+
+---
+
+<p align="center">
+  Made with ❤️ for language learners
+</p>

@@ -20,6 +20,7 @@
   let pendingImportMode = null;
   let readingSelection = { word: '', sentence: '', paragraph: '' };
   let lastHealthReport = null;
+  const ABOUT_LETTER_KEY = 'engilink-about-letter-revealed';
 
   /* ══════════════════════════════════
      INITIALIZATION
@@ -41,6 +42,8 @@
     setupDataManagement();
     setupOnboarding();
     setupHealthCheck();
+    setupHelp();
+    setupAboutLetter();
     setupHistory();
     setupBatchSelection();
 
@@ -807,6 +810,11 @@
       hideOnboarding();
       window.eld.openReadingOverlay(getReadingSample());
     });
+    $('#onboarding-help').addEventListener('click', async () => {
+      await completeOnboarding(false);
+      hideOnboarding();
+      navigateTo('help');
+    });
 
     if (!settings.onboardingCompleted) {
       setTimeout(() => showOnboarding(), 350);
@@ -849,6 +857,48 @@
 
   function getReadingSample() {
     return 'Technical documentation often explains how a system behaves, why a design decision matters, and what developers should do when something fails.';
+  }
+
+  function setupHelp() {
+    const onboardingBtn = $('#btn-help-onboarding');
+    if (onboardingBtn) {
+      onboardingBtn.addEventListener('click', () => showOnboarding());
+    }
+
+    const feedbackTargets = ['#btn-feedback-email', '#help-feedback-email'];
+    feedbackTargets.forEach((selector) => {
+      const el = $(selector);
+      if (!el) return;
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.eld.openExternal(getFeedbackMailto());
+      });
+    });
+  }
+
+  function setupAboutLetter() {
+    const trigger = $('#btn-about-letter');
+    const letter = $('#about-letter');
+    if (!trigger || !letter) return;
+
+    const reveal = () => {
+      letter.style.display = 'block';
+      trigger.classList.add('revealed');
+      trigger.textContent = 'Opened';
+      localStorage.setItem(ABOUT_LETTER_KEY, 'true');
+    };
+
+    if (localStorage.getItem(ABOUT_LETTER_KEY) === 'true') {
+      reveal();
+    }
+
+    trigger.addEventListener('click', reveal);
+  }
+
+  function getFeedbackMailto() {
+    const subject = encodeURIComponent('EngiLink Dictionary Feedback');
+    const body = encodeURIComponent('Hi EngiLink team,\n\nI want to send feedback about the app:\n\n');
+    return `mailto:votrongkien1881@gmail.com?subject=${subject}&body=${body}`;
   }
 
   function setupHealthCheck() {
@@ -986,10 +1036,14 @@
       $('#db-path-display').textContent = `Database: ${p}`;
     });
 
-    // Get API key link
-    $('#link-get-key').addEventListener('click', (e) => {
+    // Get API key links
+    $('#link-get-groq').addEventListener('click', (e) => {
       e.preventDefault();
-      window.eld.openExternal('https://openrouter.ai/keys');
+      window.eld.openExternal('https://console.groq.com/keys');
+    });
+    $('#link-get-gemini').addEventListener('click', (e) => {
+      e.preventDefault();
+      window.eld.openExternal('https://aistudio.google.com/apikey');
     });
   }
 

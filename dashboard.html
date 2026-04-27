@@ -44,6 +44,10 @@
       </div>
 
       <div class="sidebar-bottom">
+        <button class="nav-item" data-page="help" id="nav-help">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          <span>Help</span>
+        </button>
         <button class="nav-item" data-page="settings" id="nav-settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
           <span>Settings</span>
@@ -265,6 +269,43 @@
         </div>
       </section>
 
+      <!-- HELP PAGE -->
+      <section class="page" id="page-help">
+        <div class="page-header">
+          <h1 class="page-title">Help</h1>
+          <div class="page-actions">
+            <button class="btn-primary" id="btn-help-onboarding">View Onboarding Again</button>
+          </div>
+        </div>
+
+        <div class="help-grid">
+          <div class="help-card">
+            <h3>Quick Start</h3>
+            <ol class="help-steps">
+              <li>Open Settings, add your API key, choose the model and target language, then run Test Connection.</li>
+              <li>Select text anywhere and press the Lookup hotkey to open the overlay.</li>
+              <li>Use Translation, Explanation, and Reading tabs inside the overlay depending on what you need.</li>
+              <li>Open Spotlight for quick manual lookup, or use OCR when text cannot be copied.</li>
+              <li>Review saved words in Study Mode and export a backup before moving devices.</li>
+            </ol>
+          </div>
+
+          <div class="help-card">
+            <h3>Reading Mode</h3>
+            <p>Reading Mode lives inside the overlay. Select a sentence or paragraph, open the overlay, click the Reading tab, then press Process. Every word is clickable and saved words are highlighted.</p>
+            <p>Use Lookup for a selected word, Sentence for the current sentence, Translate for the whole text, and Save to store useful words or phrases.</p>
+          </div>
+
+          <div class="help-card">
+            <h3>Feedback</h3>
+            <p>Send feedback about the app, bug reports, or feature ideas to <a href="mailto:votrongkien1881@gmail.com" id="help-feedback-email">votrongkien1881@gmail.com</a>.</p>
+            <div class="help-actions">
+              <button class="btn-secondary" id="btn-feedback-email">Send App Feedback</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ═══════ SETTINGS PAGE ═══════ -->
       <section class="page" id="page-settings">
         <div class="page-header">
@@ -281,7 +322,7 @@
             <div class="setting-row">
               <label class="setting-label" for="setting-api-key">API Key</label>
               <input type="password" id="setting-api-key" class="setting-input" placeholder="Enter your API key (Bearer token)">
-              <p class="setting-hint">Works with any OpenAI-compatible API: <a href="#" id="link-get-key">OpenRouter</a>, Groq, Together, OpenAI, etc.</p>
+              <p class="setting-hint">Works with any OpenAI-compatible API: OpenRouter, <a href="#" id="link-get-groq">Groq</a>, <a href="#" id="link-get-gemini">Gemini</a>, Together, OpenAI, etc.</p>
             </div>
             <div class="setting-row">
               <label class="setting-label" for="setting-model">Model</label>
@@ -457,10 +498,21 @@
 
           <!-- About -->
           <div class="settings-card">
-            <h3 class="settings-card-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-              About
+            <h3 class="settings-card-title about-title">
+              <span class="about-title-main">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                About
+              </span>
+              <button class="about-secret-trigger" id="btn-about-letter" type="button" title="Open a note from the creator">About</button>
             </h3>
+            <div class="about-letter" id="about-letter" style="display:none;">
+              <p>Gửi bạn,</p>
+              <p>Ban đầu, EngiLink được tôi tạo ra với một mục đích rất riêng: hỗ trợ cho việc đọc tài liệu, học tập và nghiên cứu của chính mình. Tôi muốn có một công cụ nhỏ luôn ở bên cạnh, giúp tôi hiểu nhanh hơn những khái niệm khó, ghi lại những từ quan trọng, và bớt cảm giác đơn độc khi phải đi qua những đoạn tài liệu dài.</p>
+              <p>Sau một thời gian sử dụng, tôi nhận ra nếu nó có thể giúp tôi tiến thêm từng chút một, có lẽ nó cũng có thể giúp bạn bè và người thân của tôi. Vì vậy tôi muốn chia sẻ EngiLink như một món quà nhỏ: không phải để thay bạn học, mà để ở cạnh bạn trong lúc bạn học, đọc, tra cứu, thử lại, và trưởng thành hơn mỗi ngày.</p>
+              <p>Tôi hy vọng khi dùng app này, bạn sẽ tin tưởng vào bản thân nhiều hơn. Đừng sợ việc bắt đầu chậm, đừng vội so sánh hành trình của mình với ai khác. Chỉ cần hôm nay bạn hiểu thêm một điều, ghi nhớ thêm một từ, hoặc đủ tự tin để tiếp tục lựa chọn của mình, vậy đã là một bước rất đáng quý.</p>
+              <p>Chúc bạn luôn giữ được sự tò mò, sự kiên trì, và sự tự tin để đi đến cùng với con đường mình đã chọn. Mong EngiLink có thể góp một phần nhỏ vào những thành công đẹp đẽ đang chờ bạn phía trước.</p>
+              <p class="about-letter-signature">- Vo Trong Kien</p>
+            </div>
             <p class="about-text">
               <strong>EngiLink Dictionary v3.5</strong><br>
               A smart multilingual dictionary with AI-powered translation, OCR, reading mode, backup tools, and spaced repetition.<br>
@@ -497,29 +549,43 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
       <div class="onboarding-kicker">Welcome to EngiLink</div>
-      <h2 class="onboarding-title">Set up the app in a few minutes</h2>
-      <p class="onboarding-copy">EngiLink is ready for lookup, reading, OCR, flashcards, and backups. These are the three things worth checking first.</p>
+      <h2 class="onboarding-title">Set up the app with confidence</h2>
+      <p class="onboarding-copy">This first-run guide walks through the core flow: connect AI, learn the overlay, use Reading Mode, save words, and protect your data.</p>
 
       <div class="onboarding-steps">
         <div class="onboarding-step">
           <span class="onboarding-number">1</span>
           <div>
-            <strong>Add an API key</strong>
-            <p>Open Settings, paste your OpenRouter or OpenAI-compatible key, then use Test Connection.</p>
+            <strong>Connect your AI provider</strong>
+            <p>Open Settings, paste an OpenRouter or OpenAI-compatible API key, choose the model, set your target language, then click Test Connection.</p>
           </div>
         </div>
         <div class="onboarding-step">
           <span class="onboarding-number">2</span>
           <div>
-            <strong>Try the core workflows</strong>
-            <p>Use hotkey lookup, Spotlight, OCR, and Reading Mode to learn how each window behaves.</p>
+            <strong>Check hotkeys and capture tools</strong>
+            <p>Use Lookup for selected text, Spotlight for manual search, and OCR for screenshots or PDFs where text cannot be copied.</p>
           </div>
         </div>
         <div class="onboarding-step">
           <span class="onboarding-number">3</span>
           <div>
-            <strong>Protect your data</strong>
-            <p>Use Full Backup before sharing builds or moving to another computer.</p>
+            <strong>Understand the overlay tabs</strong>
+            <p>Translation gives the direct meaning, Explanation adds technical context, and Reading turns longer text into clickable words.</p>
+          </div>
+        </div>
+        <div class="onboarding-step">
+          <span class="onboarding-number">4</span>
+          <div>
+            <strong>Practice and save useful words</strong>
+            <p>Looked-up words can be saved automatically, marked as favorites, reviewed in Study Mode, and exported for backup or Anki-style study.</p>
+          </div>
+        </div>
+        <div class="onboarding-step">
+          <span class="onboarding-number">5</span>
+          <div>
+            <strong>Protect your data and get help</strong>
+            <p>Use Full Backup before sharing builds or moving to another computer. You can reopen this guide anytime from Help.</p>
           </div>
         </div>
       </div>
@@ -527,6 +593,7 @@
       <div class="onboarding-actions">
         <button class="btn-primary" id="onboarding-settings">Open Settings</button>
         <button class="btn-secondary" id="onboarding-reading">Open Overlay Reading</button>
+        <button class="btn-secondary" id="onboarding-help">Open Help</button>
         <button class="btn-secondary" id="onboarding-done">Done</button>
       </div>
     </div>

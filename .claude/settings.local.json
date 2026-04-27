@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /d -maxdepth 5 -iname \"scheduling-app*\" -type d)",
+      "Bash(find /d -maxdepth 5 -iname \"*schedul*\" -type d)",
+      "Bash(git -C \"d:/__test/translate-app\" remote -v)"
+    ]
+  }
+}
