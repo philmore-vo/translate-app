@@ -2,3 +2,4 @@ node_modules/
 assets/copy_debug.log
 dist/
 dist-v3.2/
+.claude
