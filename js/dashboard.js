@@ -630,11 +630,12 @@
       // Update hotkeys transactionally first
       const hkLookup = $('#setting-hotkey-lookup').value;
       const hkSpotlight = $('#setting-hotkey-spotlight').value;
-      if (hkLookup && hkSpotlight) {
-        const hkResult = await window.eld.updateHotkeys({ lookup: hkLookup, spotlight: hkSpotlight });
+      const hkOcr = $('#setting-hotkey-ocr').value;
+      if (hkLookup && hkSpotlight && hkOcr) {
+        const hkResult = await window.eld.updateHotkeys({ lookup: hkLookup, spotlight: hkSpotlight, ocr: hkOcr });
         const hkStatus = $('#hotkey-status');
         if (hkResult.success) {
-          newSettings.hotkeys = { lookup: hkLookup, spotlight: hkSpotlight };
+          newSettings.hotkeys = { lookup: hkLookup, spotlight: hkSpotlight, ocr: hkOcr };
           hkStatus.textContent = '✓ Hotkeys updated';
           hkStatus.style.color = 'var(--green)';
         } else {
@@ -679,6 +680,7 @@
     // Hotkey recorder
     setupHotkeyRecorder('#setting-hotkey-lookup');
     setupHotkeyRecorder('#setting-hotkey-spotlight');
+    setupHotkeyRecorder('#setting-hotkey-ocr');
 
     // DB path
     window.eld.getDbPath().then((p) => {
@@ -721,6 +723,7 @@
     if (settings.hotkeys) {
       $('#setting-hotkey-lookup').value = settings.hotkeys.lookup || 'CommandOrControl+Shift+Z';
       $('#setting-hotkey-spotlight').value = settings.hotkeys.spotlight || 'CommandOrControl+Shift+Space';
+      $('#setting-hotkey-ocr').value = settings.hotkeys.ocr || 'CommandOrControl+Shift+X';
     }
     // Theme
     $('#setting-theme-dark').checked = settings.theme === 'dark';
