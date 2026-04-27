@@ -134,6 +134,22 @@ function joinApiPath(base, apiPath) {
   return `${base.replace(/\/+$/, '')}/${apiPath.replace(/^\/+/, '')}`;
 }
 
+function getUnpackedAssetPath(...segments) {
+  if (app.isPackaged) {
+    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', ...segments);
+    if (fs.existsSync(unpackedPath)) return unpackedPath;
+  }
+  return path.join(__dirname, ...segments);
+}
+
+function isLocalHttpHost(hostname) {
+  return ['localhost', '127.0.0.1', '::1'].includes(String(hostname || '').toLowerCase());
+}
+
+function isSafeApiEndpoint(apiUrl) {
+  return apiUrl.protocol === 'https:' || (apiUrl.protocol === 'http:' && isLocalHttpHost(apiUrl.hostname));
+}
+
 function buildCacheKey(text, isPhrase, targetLang, endpoint, model) {
   const normalized = text.toLowerCase().trim();
   const raw = `${normalized}|${isPhrase}|${targetLang}|${endpoint}|${model}|pv2`;
@@ -377,7 +393,7 @@ function getAppHealthCheck() {
   let endpointOk = false;
   try {
     const endpoint = new URL(db.settings.apiEndpoint || '');
-    endpointOk = endpoint.protocol === 'https:' || endpoint.protocol === 'http:';
+    endpointOk = isSafeApiEndpoint(endpoint);
   } catch {
     endpointOk = false;
   }
@@ -385,7 +401,7 @@ function getAppHealthCheck() {
     'endpoint',
     'API Endpoint',
     endpointOk ? 'ok' : 'error',
-    endpointOk ? db.settings.apiEndpoint : 'Endpoint is not a valid URL.'
+    endpointOk ? db.settings.apiEndpoint : 'Endpoint must be HTTPS, or HTTP only for localhost.'
   );
 
   addCheck(
@@ -853,6 +869,10 @@ function requestChatCompletion(endpoint, apiKey, model, messages, maxTokens) {
     try {
       const fullUrl = joinApiPath(endpoint, 'chat/completions');
       apiUrl = new URL(fullUrl);
+      if (!isSafeApiEndpoint(apiUrl)) {
+        resolve({ success: false, error: 'API endpoint must use HTTPS, or HTTP only for localhost.', statusCode: 0, latencyMs: 0 });
+        return;
+      }
     } catch (e) {
       resolve({ success: false, error: 'Invalid API endpoint URL: ' + endpoint, statusCode: 0, latencyMs: 0 });
       return;
@@ -1515,7 +1535,7 @@ function createOverlayWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -1626,7 +1646,7 @@ function showDashboard() {
       preload: path.join(__dirname, 'preload-dashboard.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
     show: false,
   });
@@ -1721,7 +1741,7 @@ function createSpotlightWindow() {
       preload: path.join(__dirname, 'preload-spotlight.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -1890,7 +1910,7 @@ function createSnipWindow() {
       preload: path.join(__dirname, 'preload-snip.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -2051,7 +2071,7 @@ let currentHotkeys = {};
 const hotkeyHandlers = {
   lookup: () => {
     const { execFile } = require('child_process');
-    const copyExe = path.join(__dirname, 'assets', 'copy.exe');
+    const copyExe = getUnpackedAssetPath('assets', 'copy.exe');
 
     const oldClip = clipboard.readText();
 

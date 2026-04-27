@@ -61,11 +61,15 @@
         ]
       }
     ],
-    "asar": true
+    "asar": true,
+    "asarUnpack": [
+      "assets/copy.exe",
+      "assets/copy.vbs"
+    ]
   },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^25.1.8",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
     "png-to-ico": "^3.0.1"
   },
   "dependencies": {
