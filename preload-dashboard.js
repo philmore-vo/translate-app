@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('eld', {
 
   // SRS Study
   getDueCards: () => ipcRenderer.invoke('study:getDueCards'),
+  getStudyCards: (opts) => ipcRenderer.invoke('study:getStudyCards', opts),
   reviewCard: (wordId, quality) => ipcRenderer.invoke('study:reviewCard', wordId, quality),
 
   // Cache

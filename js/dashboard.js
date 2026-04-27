@@ -381,20 +381,18 @@
   }
 
   async function startStudy() {
-    // Use SRS due cards
-    studyCards = await window.eld.getDueCards();
-
     const topicFilter = $('#study-topic-filter').value;
-    if (topicFilter) {
-      studyCards = studyCards.filter((w) => w.topic === topicFilter);
-    }
+    const countInput = parseInt($('#study-word-count').value, 10) || 10;
+    const count = Math.min(20, Math.max(1, countInput));
+
+    // Use new priority-based endpoint
+    studyCards = await window.eld.getStudyCards({ topic: topicFilter || '', count });
 
     if (studyCards.length === 0) {
-      alert('No cards due for review! Look up some words first or check back later.');
+      alert('No words found! Look up some words first to build your library.');
       return;
     }
 
-    studyCards = studyCards.slice(0, Math.min(20, studyCards.length));
     studyIndex = 0;
     studyRevealed = false;
 

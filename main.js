@@ -761,6 +761,49 @@ function setupIPC() {
     });
   });
 
+  ipcMain.handle('study:getStudyCards', (event, { topic, count }) => {
+    const db = loadDatabase();
+    let pool = [...db.words];
+
+    // Filter by topic if specified
+    if (topic) {
+      pool = pool.filter((w) => w.topic === topic);
+    }
+
+    if (pool.length === 0) return [];
+
+    // Separate into never-studied and already-studied
+    const neverStudied = pool.filter((w) => !w.repetitions || w.repetitions === 0);
+    const studied = pool.filter((w) => w.repetitions && w.repetitions > 0);
+
+    // Sort studied by repetitions ascending (least studied first)
+    studied.sort((a, b) => (a.repetitions || 0) - (b.repetitions || 0));
+
+    // Shuffle never-studied (Fisher-Yates)
+    for (let i = neverStudied.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [neverStudied[i], neverStudied[j]] = [neverStudied[j], neverStudied[i]];
+    }
+
+    // Shuffle within same-repetition groups in studied
+    let i = 0;
+    while (i < studied.length) {
+      let j = i;
+      while (j < studied.length && studied[j].repetitions === studied[i].repetitions) j++;
+      // Shuffle [i, j)
+      for (let k = j - 1; k > i; k--) {
+        const r = i + Math.floor(Math.random() * (k - i + 1));
+        [studied[k], studied[r]] = [studied[r], studied[k]];
+      }
+      i = j;
+    }
+
+    // Merge: new words first, then least-studied
+    const merged = [...neverStudied, ...studied];
+    const limit = Math.min(Math.max(1, count || 10), 20);
+    return merged.slice(0, limit);
+  });
+
   ipcMain.handle('study:reviewCard', (event, wordId, quality) => {
     const db = loadDatabase();
     const idx = db.words.findIndex((w) => w.id === wordId);
