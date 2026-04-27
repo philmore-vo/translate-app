@@ -70,8 +70,14 @@
 
 ### Cách 1: Cài bằng installer (khuyến nghị)
 
-1. Vào mục **Releases** trên repository: <https://github.com/philmore-vo/translate-app/releases>
-2. Tải file **`EngiLink Dictionary Setup x.x.x.exe`**
+<p align="center">
+  <a href="https://github.com/philmore-vo/translate-app/releases">
+    <img src="https://img.shields.io/badge/⬇️_TẢI_VỀ_MÁY-EngiLink_Dictionary-7c3aed?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
+  </a>
+</p>
+
+1. Mở [**trang Releases trên GitHub**](https://github.com/philmore-vo/translate-app/releases) (hoặc bấm nút trên)
+2. Tải file **`EngiLink Dictionary Setup x.x.x.exe`** ở phiên bản mới nhất
 3. Mở file `.exe` và làm theo wizard cài đặt
 4. Nếu Windows hiện **SmartScreen**, chọn **More info** → **Run anyway** (app cá nhân chưa có code signing — đây là tình trạng bình thường)
 

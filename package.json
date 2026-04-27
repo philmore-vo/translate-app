@@ -34,8 +34,7 @@
       "installerHeaderIcon": "assets/tray-icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "EngiLink Dictionary",
-      "include": "build/installer.nsh"
+      "shortcutName": "EngiLink Dictionary"
     },
     "files": [
       "main.js",
