@@ -71,7 +71,7 @@
 ### Cách 1: Cài bằng installer (khuyến nghị)
 
 <p align="center">
-  <a href="https://github.com/philmore-vo/translate-app/releases">
+  <a href="https://github.com/philmore-vo/translate-app/releases/tag/translate-app">
     <img src="https://img.shields.io/badge/⬇️_TẢI_VỀ_MÁY-EngiLink_Dictionary-7c3aed?style=for-the-badge&logo=windows&logoColor=white" alt="Download" />
   </a>
 </p>
