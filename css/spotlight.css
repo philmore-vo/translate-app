@@ -22,6 +22,12 @@ html, body {
   -webkit-app-region: drag;
 }
 
+[data-theme="dark"] .spotlight-bar {
+  background: #221B16;
+  border-color: #7A6252;
+  box-shadow: 4px 4px 0px #7A6252, 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
 .spotlight-bar:focus-within {
   border-color: #FF6B6B;
   border-style: solid;
@@ -45,9 +51,17 @@ html, body {
   -webkit-app-region: no-drag;
 }
 
+[data-theme="dark"] #spotlight-input {
+  color: #F7E8D3;
+}
+
 #spotlight-input::placeholder {
   color: #A08878;
   font-weight: 400;
+}
+
+[data-theme="dark"] #spotlight-input::placeholder {
+  color: #BFA58C;
 }
 
 @keyframes spotlightIn {

@@ -120,6 +120,7 @@ function getLocalDateStr(date) {
 let tray = null;
 let overlayWindow = null;
 let dashboardWindow = null;
+let runtimeTheme = null;
 
 /* ══════════════════════════════════════════════
    DATABASE OPERATIONS
@@ -716,6 +717,7 @@ function setupIPC() {
       ...newSettings,
       hotkeys: { ...db.settings.hotkeys, ...(newSettings.hotkeys || {}) },
     };
+    runtimeTheme = db.settings.theme || runtimeTheme;
     return saveDatabase(db);
   });
 
@@ -811,6 +813,17 @@ function setupIPC() {
   ipcMain.on('overlay:show', (event, word) => {
     if (typeof word === 'string' && word.trim()) {
       showOverlay(word.trim());
+    }
+  });
+
+  ipcMain.on('theme:preview', (event, theme) => {
+    if (!['light', 'dark'].includes(theme)) return;
+    runtimeTheme = theme;
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.webContents.send('theme:preview', theme);
+    }
+    if (spotlightWindow && !spotlightWindow.isDestroyed()) {
+      spotlightWindow.webContents.send('theme:preview', theme);
     }
   });
 
@@ -1072,6 +1085,11 @@ function createSpotlightWindow() {
 
   spotlightWindow.loadFile('spotlight.html');
 
+  spotlightWindow.webContents.on('did-finish-load', () => {
+    const db = loadDatabase();
+    spotlightWindow.webContents.send('theme:preview', runtimeTheme || db.settings.theme || 'light');
+  });
+
   spotlightWindow.on('blur', () => {
     setTimeout(() => {
       if (spotlightWindow && spotlightWindow.isVisible()) {
@@ -1099,6 +1117,8 @@ function toggleSpotlight() {
     spotlightWindow.setPosition(x, y);
     spotlightWindow.show();
     spotlightWindow.focus();
+    const db = loadDatabase();
+    spotlightWindow.webContents.send('theme:preview', runtimeTheme || db.settings.theme || 'light');
     spotlightWindow.webContents.send('spotlight:show');
   }
 }

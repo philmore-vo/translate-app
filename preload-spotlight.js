@@ -6,4 +6,7 @@ contextBridge.exposeInMainWorld('spotlight', {
   onShow: (callback) => {
     ipcRenderer.on('spotlight:show', () => callback());
   },
+  onThemePreview: (callback) => {
+    ipcRenderer.on('theme:preview', (event, theme) => callback(theme));
+  },
 });

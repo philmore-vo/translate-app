@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('eld', {
 
   // Overlay
   showOverlay: (word) => ipcRenderer.send('overlay:show', word),
+  previewTheme: (theme) => ipcRenderer.send('theme:preview', theme),
 
   // Events
   onNavigate: (callback) => {

@@ -729,7 +729,9 @@
 
     // Live theme toggle
     $('#setting-theme-dark').addEventListener('change', (e) => {
-      applyTheme(e.target.checked ? 'dark' : 'light');
+      const theme = e.target.checked ? 'dark' : 'light';
+      applyTheme(theme);
+      window.eld.previewTheme(theme);
     });
   }
 

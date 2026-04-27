@@ -24,4 +24,7 @@ contextBridge.exposeInMainWorld('eld', {
   onLookupStart: (callback) => {
     ipcRenderer.on('lookup:start', (event, word) => callback(word));
   },
+  onThemePreview: (callback) => {
+    ipcRenderer.on('theme:preview', (event, theme) => callback(theme));
+  },
 });

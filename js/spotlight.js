@@ -4,6 +4,10 @@
 
   const input = document.getElementById('spotlight-input');
 
+  window.spotlight.onThemePreview((theme) => {
+    document.body.setAttribute('data-theme', theme);
+  });
+
   // Auto-focus when shown
   window.spotlight.onShow(() => {
     input.value = '';

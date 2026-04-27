@@ -46,6 +46,10 @@
   let currentFullText = null; // full text for TTS (not truncated)
 
   // ── Listen for lookup from main process ──
+  window.eld.onThemePreview((theme) => {
+    document.body.setAttribute('data-theme', theme);
+  });
+
   window.eld.onLookupStart(async (word) => {
     // Apply theme
     try {
