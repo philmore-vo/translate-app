@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/Electron-41.x-47848F?style=flat&logo=electron&logoColor=white" alt="Electron" />
-  <img src="https://img.shields.io/badge/Version-3.5.0-7c3aed?style=flat" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-3.6.1-7c3aed?style=flat" alt="Version" />
   <img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat" alt="License" />
 </p>
 
@@ -39,6 +39,7 @@
 - 🧠 **SRS flashcard** — học lại từ vựng theo thuật toán SM-2 (Anki-style)
 - 📷 **OCR màn hình** — quét vùng có chữ trên ảnh/PDF/video → tra trực tiếp
 - 📚 **Reading Mode** — dán đoạn văn vào app để đọc và tra từ inline
+- 🧩 **Smart Vocabulary Extraction** — dịch cả đoạn nhưng chỉ lưu từng từ vựng quan trọng vào Library
 - 💾 **Lưu trữ cục bộ** — toàn bộ dữ liệu nằm trên máy bạn, có backup/restore an toàn
 
 > 💡 **Ai nên dùng?** Sinh viên, dân kỹ thuật, người đọc tài liệu/sách tiếng Anh thường xuyên — bất kỳ ai cần một công cụ tra từ nhanh, có ngữ cảnh và biết học theo thời gian.
@@ -49,13 +50,15 @@
 
 | Tính năng | Mô tả |
 |-----------|-------|
-| 🔤 **AI Translation** | Dịch từ/cụm từ kèm giải thích, ví dụ, related words, tech note |
+| 🔤 **AI Translation** | Dịch từ/cụm từ/đoạn văn kèm giải thích, ví dụ, related words, tech note |
+| 🧩 **Smart Vocabulary Extraction** | Khi dịch đoạn, app tự tách từ bằng code, lọc stop words và chỉ lưu từng từ riêng lẻ vào Library |
+| 🧠 **Enhanced Word Data** | Mỗi từ có synonyms, antonyms, prepositions/phrasal verbs, V2/V3, example sentence và contexts |
 | ⌨️ **Hotkey Lookup** | `Ctrl + Shift + Z` để tra từ đang bôi đen ở bất kỳ app nào |
 | 🔍 **Spotlight Search** | `Ctrl + Shift + Space` để mở thanh tìm nhanh |
 | 📷 **OCR Capture** | `Ctrl + Shift + X` để quét chữ từ vùng màn hình |
 | 📖 **Reading Mode** | Dán đoạn văn → click từng từ để tra inline bằng overlay |
-| 📚 **Library** | Lưu từ đã tra, ghi chú cá nhân, phân loại theo topic |
-| 🎓 **Study (SRS)** | Học flashcard theo thuật toán SM-2, có Again/Hard/Good/Easy |
+| 📚 **Library** | Lưu từ đã tra, ghi chú cá nhân, contexts, topic và dữ liệu enrichment |
+| 🎓 **Study (SRS)** | Học flashcard theo thuật toán SM-2, có Again/Hard/Good/Easy và dữ liệu mở rộng khi reveal |
 | 📜 **History** | Timeline các lần tra gần đây, click để mở lại overlay |
 | 🔊 **Pronunciation** | Phát âm online (audio API) + offline TTS fallback |
 | 🌙 **Dark Mode** | Giao diện tối/sáng cho Dashboard, Overlay và Spotlight |
@@ -193,8 +196,11 @@ Sau khi onboarding, vào **Settings** để hoàn thiện:
    - 🌐 Bản dịch + giải thích AI
    - 📚 Định nghĩa từ điển
    - 🔊 Phát âm
-   - 🔗 Related words / synonyms (click để tra tiếp)
-   - 💾 Nút **Save Word** để lưu vào Library
+   - 🔗 Related words / synonyms / antonyms (click để tra tiếp)
+   - 🧠 Prepositions/phrasal verbs, V2/V3 và example sentence nếu có
+   - 💾 Tự lưu vào Library nếu bật Auto-save
+
+> Khi bôi đen cả câu hoặc đoạn văn, overlay vẫn hiển thị bản dịch đầy đủ. Library sẽ không lưu nguyên câu/đoạn, mà tách thành từng từ vựng quan trọng, lọc stop words rồi enrichment chạy nền.
 
 ### 2. Spotlight Search
 
@@ -218,7 +224,7 @@ Dùng khi muốn đọc một bài/đoạn tiếng Anh:
 2. Dán đoạn văn vào ô bên trái → bấm **Process Text**
 3. Click vào bất kỳ từ nào để mở overlay tra (không phải chuyển trang)
 4. Từ đã có trong Library sẽ được **highlight**
-5. Dùng **Save Word** / **Save Phrase** để lưu nhanh
+5. Dùng **Save Word** / **Save Selection** để lưu nhanh; nếu selection là câu/đoạn, app sẽ tách từ và không lưu nguyên câu
 6. Dùng **Explain Sentence** / **Translate Paragraph** để hiểu cả câu/đoạn
 
 ### 5. Library
@@ -228,7 +234,8 @@ Trang lưu tất cả từ đã tra:
 - 🔍 Tìm kiếm + lọc theo topic
 - 📝 Thêm note cá nhân (auto-save)
 - 🔊 Phát âm
-- 🔗 Click related word để mở overlay
+- 🧠 Xem lại synonyms, antonyms, prepositions/phrasal verbs, V2/V3, example sentence và contexts
+- 🔗 Click related/synonym/antonym để mở overlay
 - ☑️ Chọn nhiều từ → xóa hoặc export hàng loạt
 
 ### 6. Study (Flashcard SRS)
@@ -239,7 +246,8 @@ Học lại từ theo thuật toán SM-2:
 2. Chọn số lượng từ (1–20)
 3. Bấm **Start Review**
 4. Chấm điểm: `Again` / `Hard` / `Good` / `Easy` — app sẽ tính toán ngày ôn tiếp theo
-5. Click related word khi đang học → overlay mở mà không làm mất tiến trình
+5. Khi reveal, flashcard có thể hiện thêm V2/V3, prepositions, antonyms và example sentence
+6. Click related word khi đang học → overlay mở mà không làm mất tiến trình
 
 ### 7. History & Statistics
 
@@ -424,7 +432,7 @@ translate-app/
 ├── 📄 setup.bat / start-app.bat
 ├── 📄 eng.traineddata          ← OCR English (offline)
 ├── 📁 css/                     ← Stylesheets
-├── 📁 js/                      ← Renderer logic (dashboard.js…)
+├── 📁 js/                      ← Renderer logic + tokenizer (dashboard.js, overlay.js, stop-words.js…)
 ├── 📁 assets/                  ← Icon, tray icon, helpers
 ├── 📁 scripts/                 ← electron-builder afterPack
 └── 📁 dist/                    ← Output sau khi build
@@ -434,7 +442,15 @@ translate-app/
 
 ## 📜 Lịch sử cập nhật
 
-### V3.5 (hiện tại)
+### V3.6.1 (hiện tại)
+
+- 🧩 **Smart Vocabulary Extraction** — dịch câu/đoạn nhưng Library chỉ lưu từng từ vựng đã tách, không lưu nguyên phrase/paragraph
+- 🧠 **Enhanced Word Data** — thêm synonyms, antonyms, prepositions/phrasal verbs, V2/V3, example sentence và contexts
+- 🎯 Topic của từ phổ thông như `use`, `form`, `similar`, `different` được chuẩn hóa về **General** thay vì ăn theo topic của cả câu
+- 📚 Library detail modal và Study flashcard hiển thị dữ liệu enrichment đầy đủ hơn
+- 📦 Schema migration lên V8 và cache AI được version hóa lại để tránh dùng response cũ thiếu dữ liệu
+
+### V3.5
 
 - 🩺 **Health Check** trong Settings — kiểm tra DB, library, API, OCR, backup, hotkeys
 - 📤 Export health report ra JSON để debug/chia sẻ

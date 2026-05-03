@@ -8,6 +8,7 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const crypto = require('crypto');
+const { classifyInput, extractVocabulary } = require('./js/stop-words');
 
 // ── Database file path ──
 const DB_DIR = path.join(app.getPath('userData'), 'engilink-db');
@@ -16,9 +17,9 @@ const DB_BACKUP = path.join(DB_DIR, 'data.backup.json');
 const DB_BACKUP_DIR = path.join(DB_DIR, 'backups');
 const MAX_AUTO_BACKUPS = 5;
 
-// ── Default data structure (V3) ──
+// ── Default data structure (V8) ──
 const DEFAULT_DATA = {
-  schemaVersion: 5,
+  schemaVersion: 8,
   words: [],
   lookupHistory: [],
   aiCache: {},
@@ -126,6 +127,45 @@ function migrateDatabase(data) {
     console.log('Migrated database to schema v5');
   }
 
+  // ── V5 → V6: Enhanced word data ──
+  if (version < 6) {
+    for (const w of data.words) {
+      if (!w.contexts) w.contexts = [];
+      if (!w.synonyms) w.synonyms = [];
+      if (!w.antonyms) w.antonyms = [];
+      if (!w.prepositions) w.prepositions = [];
+      if (w.verbForms === undefined) w.verbForms = null;
+      if (!w.exampleSentence) w.exampleSentence = '';
+      if (!w.phraseType) w.phraseType = '';
+      if (!w.enrichmentStatus) w.enrichmentStatus = 'done';
+    }
+    data.schemaVersion = 6;
+    changed = true;
+    console.log('📦 Migrated database to schema v6 (enhanced word data)');
+  }
+
+  if (version < 7) {
+    for (const w of data.words) {
+      if (GENERAL_TOPIC_WORDS.has(normalizeWordKey(w.word))) {
+        w.topic = 'General';
+      }
+    }
+    data.schemaVersion = 7;
+    changed = true;
+    console.log('Migrated database to schema v7 (word-level topic cleanup)');
+  }
+
+  if (version < 8) {
+    for (const w of data.words) {
+      if (!Array.isArray(w.antonyms)) w.antonyms = [];
+      w.enrichmentVersion = w.antonyms.length > 0 ? 2 : (Number(w.enrichmentVersion) || 1);
+    }
+    data.aiCache = {};
+    data.schemaVersion = 8;
+    changed = true;
+    console.log('Migrated database to schema v8 (antonyms enrichment)');
+  }
+
   return { data, changed };
 }
 
@@ -150,9 +190,9 @@ function isSafeApiEndpoint(apiUrl) {
   return apiUrl.protocol === 'https:' || (apiUrl.protocol === 'http:' && isLocalHttpHost(apiUrl.hostname));
 }
 
-function buildCacheKey(text, isPhrase, targetLang, endpoint, model) {
+function buildCacheKey(text, inputType, targetLang, endpoint, model) {
   const normalized = text.toLowerCase().trim();
-  const raw = `${normalized}|${isPhrase}|${targetLang}|${endpoint}|${model}|pv2`;
+  const raw = `${normalized}|${inputType}|${targetLang}|${endpoint}|${model}|pv4`;
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16);
 }
 
@@ -522,6 +562,16 @@ function normalizeImportedWord(raw) {
     interval: Number(source.interval) || 0,
     repetitions: Number(source.repetitions) || 0,
     dueDate: source.dueDate || null,
+    // V6 fields
+    contexts: Array.isArray(source.contexts) ? source.contexts : [],
+    synonyms: Array.isArray(source.synonyms) ? source.synonyms : [],
+    antonyms: Array.isArray(source.antonyms) ? source.antonyms : [],
+    prepositions: Array.isArray(source.prepositions) ? source.prepositions : [],
+    verbForms: source.verbForms || null,
+    exampleSentence: source.exampleSentence || source.example || '',
+    phraseType: source.phraseType || source.partOfSpeech || '',
+    enrichmentStatus: source.enrichmentStatus || 'done',
+    enrichmentVersion: Number(source.enrichmentVersion) || (Array.isArray(source.antonyms) && source.antonyms.length > 0 ? 2 : 1),
   };
 }
 
@@ -529,7 +579,7 @@ function mergeImportedWord(existing, incoming) {
   const merged = { ...existing };
   const fillFields = [
     'phonetic', 'audioUrl', 'technicalNote', 'translatedMeaning', 'vietnameseMeaning',
-    'topic', 'firstLookup', 'lastLookup',
+    'topic', 'firstLookup', 'lastLookup', 'exampleSentence', 'phraseType',
   ];
   for (const field of fillFields) {
     if (!merged[field] && incoming[field]) merged[field] = incoming[field];
@@ -550,6 +600,45 @@ function mergeImportedWord(existing, incoming) {
   if (merged.interval === undefined) merged.interval = incoming.interval || 0;
   if (merged.repetitions === undefined) merged.repetitions = incoming.repetitions || 0;
   if (merged.dueDate === undefined) merged.dueDate = incoming.dueDate || null;
+
+  // V6 fields — merge arrays (union), fill scalars
+  if (incoming.contexts && incoming.contexts.length) {
+    if (!merged.contexts) merged.contexts = [];
+    for (const ctx of incoming.contexts) {
+      if (!merged.contexts.some((c) => c.sentence === ctx.sentence)) {
+        merged.contexts.push(ctx);
+      }
+    }
+    if (merged.contexts.length > 5) merged.contexts = merged.contexts.slice(-5);
+  }
+  if (incoming.synonyms && incoming.synonyms.length) {
+    if (!merged.synonyms) merged.synonyms = [];
+    for (const syn of incoming.synonyms) {
+      if (!merged.synonyms.some((s) => s.word === syn.word)) {
+        merged.synonyms.push(syn);
+      }
+    }
+  }
+  if (incoming.antonyms && incoming.antonyms.length) {
+    if (!merged.antonyms) merged.antonyms = [];
+    for (const ant of incoming.antonyms) {
+      const incomingWord = typeof ant === 'string' ? ant : ant.word;
+      if (!merged.antonyms.some((a) => (typeof a === 'string' ? a : a.word) === incomingWord)) {
+        merged.antonyms.push(ant);
+      }
+    }
+  }
+  if (incoming.prepositions && incoming.prepositions.length) {
+    if (!merged.prepositions) merged.prepositions = [];
+    for (const prep of incoming.prepositions) {
+      if (!merged.prepositions.some((p) => p.phrase === prep.phrase)) {
+        merged.prepositions.push(prep);
+      }
+    }
+  }
+  if (!merged.verbForms && incoming.verbForms) merged.verbForms = incoming.verbForms;
+  if (merged.enrichmentStatus === undefined) merged.enrichmentStatus = incoming.enrichmentStatus || 'done';
+  merged.enrichmentVersion = Math.max(Number(merged.enrichmentVersion) || 1, Number(incoming.enrichmentVersion) || 1);
   return merged;
 }
 
@@ -559,7 +648,7 @@ function csvEscape(value) {
 }
 
 function wordsToCsv(words) {
-  const headers = ['word', 'translatedMeaning', 'definition', 'topic', 'phonetic', 'relatedTerms', 'userNote', 'isFavorite', 'lookupCount'];
+  const headers = ['word', 'translatedMeaning', 'definition', 'topic', 'phonetic', 'relatedTerms', 'userNote', 'isFavorite', 'lookupCount', 'phraseType', 'synonyms', 'antonyms', 'prepositions', 'verbForms', 'exampleSentence'];
   const rows = words.map((w) => [
     w.word,
     w.translatedMeaning || w.vietnameseMeaning || '',
@@ -570,17 +659,32 @@ function wordsToCsv(words) {
     w.userNote || '',
     w.isFavorite ? 'true' : 'false',
     w.lookupCount || 0,
+    w.phraseType || '',
+    (w.synonyms || []).map((s) => typeof s === 'string' ? s : `${s.word || ''}(${s.meaning || ''})`).join('; '),
+    (w.antonyms || []).map((a) => typeof a === 'string' ? a : `${a.word || ''}(${a.meaning || ''})`).join('; '),
+    (w.prepositions || []).map((p) => `${p.phrase || ''}→${p.meaning || ''}`).join('; '),
+    w.verbForms ? `V2:${w.verbForms.v2 || ''} V3:${w.verbForms.v3 || ''}` : '',
+    w.exampleSentence || '',
   ].map(csvEscape).join(','));
   return [headers.join(','), ...rows].join('\r\n');
 }
 
 function wordsToAnki(words) {
-  return words.map((w) => [
-    w.word,
-    w.translatedMeaning || w.vietnameseMeaning || '',
-    firstDefinition(w),
-    w.topic || '',
-  ].map((v) => String(v || '').replace(/[\t\r\n]+/g, ' ').trim()).join('\t')).join('\r\n');
+  return words.map((w) => {
+    const extra = [
+      w.verbForms ? `V2: ${w.verbForms.v2 || ''}, V3: ${w.verbForms.v3 || ''}` : '',
+      (w.antonyms || []).map((a) => typeof a === 'string' ? a : `${a.word || ''}: ${a.meaning || ''}`).join(' | '),
+      (w.prepositions || []).map((p) => `${p.phrase}: ${p.meaning || ''}`).join(' | '),
+      w.exampleSentence || '',
+    ].filter(Boolean).join(' / ');
+    return [
+      w.word,
+      w.translatedMeaning || w.vietnameseMeaning || '',
+      firstDefinition(w),
+      w.topic || '',
+      extra,
+    ].map((v) => String(v || '').replace(/[\t\r\n]+/g, ' ').trim()).join('\t');
+  }).join('\r\n');
 }
 
 function parseDelimitedText(text, delimiter) {
@@ -931,15 +1035,147 @@ function requestChatCompletion(endpoint, apiKey, model, messages, maxTokens) {
   });
 }
 
-// High-level: build prompt, call API, parse JSON result
-function callAI(word, apiKey, endpoint, model, isPhrase, targetLanguage) {
+// ── Parse and normalize AI JSON response ──
+function parseAIResponse(raw) {
+  if (!raw.success) {
+    console.log('🤖 AI error:', raw.statusCode, raw.error);
+    if (raw.statusCode === 429 || raw.error?.includes('quota') || raw.error?.includes('rate')) {
+      return { success: false, error: 'Rate limited — try again in ~60s' };
+    } else if (raw.statusCode === 401) {
+      return { success: false, error: 'Invalid API key — check Settings' };
+    }
+    return { success: false, error: raw.error };
+  }
+  try {
+    const content = raw.data.choices[0].message.content;
+    console.log('🤖 AI content:', content.slice(0, 400));
+    const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const result = JSON.parse(jsonStr);
+    return { success: true, parsed: result };
+  } catch (e) {
+    console.error('🤖 AI parse error:', e.message);
+    return { success: false, error: 'AI parse error: ' + e.message };
+  }
+}
+
+// ── Normalize AI result fields to schema conventions ──
+const GENERAL_TOPIC_WORDS = new Set([
+  'use', 'uses', 'used', 'using',
+  'form', 'forms',
+  'similar', 'different',
+  'term', 'terms',
+]);
+
+function normalizeWordTopic(word, topic) {
+  const key = normalizeWordKey(word);
+  if (GENERAL_TOPIC_WORDS.has(key)) return 'General';
+  return topic || '';
+}
+
+function normalizeAIResult(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) result = {};
+  result.translatedMeaning = result.translatedMeaning || result.translation || result.vietnameseMeaning || '';
+  result.phraseType = result.phraseType || result.partOfSpeech || '';
+  result.exampleSentence = result.exampleSentence || result.example || '';
+  if (!Array.isArray(result.synonyms)) result.synonyms = [];
+  if (!Array.isArray(result.antonyms)) result.antonyms = [];
+  if (!Array.isArray(result.prepositions)) result.prepositions = [];
+  if (result.verbForms && typeof result.verbForms !== 'object') result.verbForms = null;
+  if (result.word) result.topic = normalizeWordTopic(result.word, result.topic);
+  return result;
+}
+
+function needsAIEnrichment(entry) {
+  if (!entry) return true;
+  return !entry.translatedMeaning
+    || !entry.technicalNote
+    || !entry.phraseType
+    || !entry.exampleSentence
+    || !Array.isArray(entry.synonyms)
+    || entry.synonyms.length === 0
+    || !Array.isArray(entry.antonyms)
+    || (Number(entry.enrichmentVersion) || 1) < 2
+    || !Array.isArray(entry.relatedTerms)
+    || entry.relatedTerms.length === 0
+    || entry.enrichmentStatus === 'pending'
+    || entry.enrichmentStatus === 'failed'
+    || entry.enrichmentStatus === 'skipped';
+}
+
+function needsDictionaryEnrichment(entry) {
+  if (!entry) return true;
+  return !entry.phonetic
+    && !entry.audioUrl
+    && (!Array.isArray(entry.meanings) || entry.meanings.length === 0);
+}
+
+function mergeDictionaryIntoEntry(entry, dictResult) {
+  if (!entry || !dictResult || !dictResult.success) return;
+  if (dictResult.phonetic && !entry.phonetic) entry.phonetic = dictResult.phonetic;
+  if (dictResult.audioUrl && !entry.audioUrl) entry.audioUrl = dictResult.audioUrl;
+  if (dictResult.meanings && dictResult.meanings.length && (!entry.meanings || entry.meanings.length === 0)) {
+    entry.meanings = dictResult.meanings;
+  }
+  const dictAntonyms = [];
+  for (const meaning of dictResult.meanings || []) {
+    for (const antonym of meaning.antonyms || []) {
+      if (antonym && !dictAntonyms.includes(antonym)) dictAntonyms.push(antonym);
+    }
+  }
+  if (dictAntonyms.length) {
+    if (!entry.antonyms) entry.antonyms = [];
+    for (const antonym of dictAntonyms.slice(0, 8)) {
+      if (!entry.antonyms.some((a) => (typeof a === 'string' ? a : a.word) === antonym)) {
+        entry.antonyms.push({ word: antonym, meaning: '' });
+      }
+    }
+  }
+}
+
+// High-level: enriched prompt for single word / lexical phrase
+function callAIEnrich(word, apiKey, endpoint, model, inputType, targetLanguage) {
   return new Promise(async (resolve) => {
     const lang = targetLanguage || 'Vietnamese';
+    const isLexicalPhrase = inputType === 'lexicalPhrase';
 
-    let systemPrompt, userMessage;
-    if (isPhrase) {
-      systemPrompt = `You are a professional translator and language assistant.
-Given an English phrase or sentence, provide:
+    const systemPrompt = `You are an expert English dictionary and ${lang} translation assistant.
+Given ${isLexicalPhrase ? 'an English phrase' : 'an English word'}, provide ALL of the following:
+1. "definition": Clear, concise definition in English (2-3 sentences). Mention specialized meanings if any.
+2. "translatedMeaning": Short, natural ${lang} equivalent (1-8 words only, no explanatory sentence).
+3. "phraseType": Exact grammatical classification. Use one of: "noun", "verb", "adjective", "adverb", "preposition", "conjunction", "interjection", "noun phrase", "verb phrase", "phrasal verb", "idiom", "collocation", "compound noun", "prepositional phrase". Be precise.
+4. "synonyms": Array of 3-5 synonyms, each with a brief ${lang} meaning. Format: [{"word":"examine","meaning":"kiểm tra"}, ...]
+5. "antonyms": Array of 2-4 antonyms/opposites, each with a brief ${lang} meaning. Empty array [] if none.
+6. "prepositions": If the word commonly pairs with prepositions, list them. Format: [{"phrase":"look at","meaning":"nhìn vào","example":"Look at the sky."}]. Empty array [] if none.
+7. "verbForms": If it is a verb, provide past simple and past participle. Format: {"v2":"went","v3":"gone"}. null if not a verb.
+8. "exampleSentence": One simple, clear example sentence using the word/phrase naturally.
+9. "relatedTerms": 3-5 related words or phrases.
+10. "topic": A category tag for the word/phrase itself, not the surrounding sentence. Use "General" for common words such as "use", "form", "similar", or "different" even inside technical text.
+
+Respond ONLY with valid JSON, no markdown fences:
+{"definition":"...","translatedMeaning":"...","phraseType":"...","synonyms":[{"word":"...","meaning":"..."}],"antonyms":[{"word":"...","meaning":"..."}],"prepositions":[{"phrase":"...","meaning":"...","example":"..."}],"verbForms":{"v2":"...","v3":"..."},"exampleSentence":"...","relatedTerms":["..."],"topic":"..."}`;
+
+    const userMessage = isLexicalPhrase ? `Phrase: "${word}"` : `Word: "${word}"`;
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage },
+    ];
+
+    const parsed = parseAIResponse(
+      await requestChatCompletion(endpoint, apiKey, model, messages, 1000)
+    );
+
+    if (!parsed.success) { resolve(parsed); return; }
+    const normalized = normalizeAIResult({ word, ...parsed.parsed });
+    resolve({ success: true, ...normalized });
+  });
+}
+
+// High-level: translate a long text / paragraph
+function callAITranslate(text, apiKey, endpoint, model, targetLanguage) {
+  return new Promise(async (resolve) => {
+    const lang = targetLanguage || 'Vietnamese';
+    const systemPrompt = `You are a professional translator and language assistant.
+Given an English paragraph or sentence, provide:
 1. "translation": Full, natural ${lang} translation.
 2. "definition": Brief explanation of the meaning/context in English (2-3 sentences). If it contains technical or specialized terms, explain them.
 3. "translatedMeaning": Same as translation field.
@@ -948,54 +1184,103 @@ Given an English phrase or sentence, provide:
 
 Respond ONLY with valid JSON, no markdown:
 {"translation": "...", "definition": "...", "translatedMeaning": "...", "relatedTerms": ["..."], "topic": "..."}`;
-      userMessage = `Translate and explain: "${word}"`;
-    } else {
-      systemPrompt = `You are a dictionary and translation assistant.
-Given a word or short phrase, provide:
-1. A clear, concise definition (2-3 sentences). If the word has a specialized meaning in any field (tech, science, medicine, law, business, etc.), mention it.
-2. "translatedMeaning": A short, natural ${lang} equivalent for the word. Keep it concise (usually 1-8 words). Do not write a full explanatory sentence here; put explanations only in "definition".
-3. 3-5 related terms (single words or short phrases).
-4. A topic/category tag that best fits (e.g., "Technology", "Medicine", "Law", "Business", "Science", "Mathematics", "Daily Life", "Education", etc.). Use "General" if it's a common everyday word.
-
-Respond ONLY with valid JSON, no markdown:
-{"definition": "...", "translatedMeaning": "...", "relatedTerms": ["...", "..."], "topic": "..."}`;
-      userMessage = `Word: "${word}"`;
-    }
-
+    const userMessage = `Translate and explain: "${text}"`;
     const messages = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
     ];
 
-    const raw = await requestChatCompletion(endpoint, apiKey, model, messages, isPhrase ? 1000 : 400);
+    const parsed = parseAIResponse(
+      await requestChatCompletion(endpoint, apiKey, model, messages, 1000)
+    );
 
-    if (!raw.success) {
-      console.log('🤖 AI error:', raw.statusCode, raw.error);
-      if (raw.statusCode === 429 || raw.error?.includes('quota') || raw.error?.includes('rate')) {
-        resolve({ success: false, error: 'Rate limited — try again in ~60s' });
-      } else if (raw.statusCode === 401) {
-        resolve({ success: false, error: 'Invalid API key — check Settings' });
-      } else {
-        resolve({ success: false, error: raw.error });
-      }
-      return;
-    }
-
-    try {
-      const content = raw.data.choices[0].message.content;
-      console.log('🤖 AI content:', content.slice(0, 300));
-      const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-      const result = JSON.parse(jsonStr);
-
-      // Normalize translatedMeaning (fallback chain)
-      result.translatedMeaning = result.translatedMeaning || result.translation || result.vietnameseMeaning || '';
-
-      resolve({ success: true, ...result });
-    } catch (e) {
-      console.error('🤖 AI parse error:', e.message);
-      resolve({ success: false, error: 'AI parse error: ' + e.message });
-    }
+    if (!parsed.success) { resolve(parsed); return; }
+    const result = parsed.parsed;
+    result.translatedMeaning = result.translatedMeaning || result.translation || '';
+    resolve({ success: true, ...result });
   });
+}
+
+// High-level: batch enrich multiple words extracted from a paragraph
+function callAIBatchEnrich(words, sentenceContext, apiKey, endpoint, model, targetLanguage) {
+  return new Promise(async (resolve) => {
+    if (!words || words.length === 0) { resolve({ success: true, results: [] }); return; }
+
+    const lang = targetLanguage || 'Vietnamese';
+    const wordList = words.slice(0, 15); // cap at 15 to stay within token limits
+    const systemPrompt = `You are an expert English dictionary and ${lang} translation assistant.
+Given a list of English words extracted from a text, provide enrichment data for EACH word.
+
+For each word, provide:
+1. "word": the word exactly as given
+2. "translatedMeaning": short ${lang} translation (1-5 words)
+3. "definition": clear English definition (2-3 sentences)
+4. "phraseType": exact grammatical type — "noun", "verb", "adjective", "adverb", etc.
+5. "synonyms": 3-5 synonyms with brief ${lang} meaning. Format: [{"word":"...","meaning":"..."}]
+6. "antonyms": 2-4 antonyms/opposites with brief ${lang} meaning. Use [] if the word has no natural opposite.
+7. "prepositions": common preposition pairings if any. Format: [{"phrase":"...","meaning":"...","example":"..."}]. Use [] if none.
+8. "verbForms": if verb, {"v2":"...","v3":"..."}. null if not a verb.
+9. "exampleSentence": one simple example sentence
+10. "topic": category tag for the word itself, not the whole text context. Use "General" for common words such as "use/uses", "form", "similar", or "different" even inside technical text.
+11. "relatedTerms": 3-5 related words or phrases.
+
+Respond ONLY with a valid JSON array (no markdown):
+[{"word":"...","translatedMeaning":"...","definition":"...","phraseType":"...","synonyms":[{"word":"...","meaning":"..."}],"antonyms":[{"word":"...","meaning":"..."}],"prepositions":[{"phrase":"...","meaning":"...","example":"..."}],"verbForms":null,"exampleSentence":"...","topic":"...","relatedTerms":["..."]}, ...]`;
+
+    const userMessage = `Text context: "${sentenceContext.slice(0, 500)}"\n\nWords to enrich: ${JSON.stringify(wordList)}`;
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage },
+    ];
+
+    const parsed = parseAIResponse(
+      await requestChatCompletion(endpoint, apiKey, model, messages, 2200)
+    );
+
+    if (!parsed.success) { resolve(parsed); return; }
+
+    let results = parsed.parsed;
+    if (!Array.isArray(results)) {
+      // AI might wrap in an object
+      results = results.words || results.results || [];
+    }
+    results = results.map(normalizeAIResult);
+    resolve({ success: true, results });
+  });
+}
+
+/* ══════════════════════════════════════════════
+   CONTEXT COMPARISON
+   ══════════════════════════════════════════════ */
+
+function isSameContext(existingContexts, newSentence) {
+  if (!existingContexts || existingContexts.length === 0) return false;
+  const newWords = new Set(newSentence.toLowerCase().split(/\s+/).filter((w) => w.length > 2));
+  if (newWords.size === 0) return false;
+
+  return existingContexts.some((ctx) => {
+    const ctxWords = new Set((ctx.sentence || '').toLowerCase().split(/\s+/).filter((w) => w.length > 2));
+    if (ctxWords.size === 0) return false;
+    const overlap = [...newWords].filter((w) => ctxWords.has(w)).length;
+    return overlap / Math.max(newWords.size, ctxWords.size) > 0.8;
+  });
+}
+
+function addContextIfNew(wordEntry, sentence, source) {
+  if (!sentence || !sentence.trim()) return;
+  if (!wordEntry.contexts) wordEntry.contexts = [];
+  // Truncate long sentences for storage
+  const trimmed = sentence.length > 300 ? sentence.slice(0, 300).trim() + '…' : sentence.trim();
+  if (!isSameContext(wordEntry.contexts, trimmed)) {
+    wordEntry.contexts.push({
+      sentence: trimmed,
+      source: source || 'lookup',
+      date: new Date().toISOString(),
+    });
+    if (wordEntry.contexts.length > 5) {
+      wordEntry.contexts = wordEntry.contexts.slice(-5);
+    }
+  }
 }
 
 /* ══════════════════════════════════════════════
@@ -1119,16 +1404,16 @@ function setupIPC() {
 
   // ── Word Lookup (orchestrates all APIs) ──
   ipcMain.handle('lookup:word', async (event, word, options = {}) => {
-    const { forceRefresh = false } = options;
+    const { forceRefresh = false, forceSave = false } = options;
     const db = loadDatabase();
     const settings = db.settings;
 
-    // Detect if input is a phrase/sentence (2+ words)
-    const wordCount = word.trim().split(/\s+/).length;
-    const isPhrase = wordCount > 1;
+    // ── Three-way input classification ──
+    const inputType = classifyInput(word);
+    const isPhrase = inputType !== 'singleWord';
 
     // ── AI Cache check ──
-    const cacheKey = buildCacheKey(word, isPhrase, settings.targetLanguage, settings.apiEndpoint, settings.model);
+    const cacheKey = buildCacheKey(word, inputType, settings.targetLanguage, settings.apiEndpoint, settings.model);
     let aiResult;
     let usedCache = false;
 
@@ -1137,13 +1422,11 @@ function setupIPC() {
       usedCache = true;
       console.log('💾 Cache hit for:', word.slice(0, 40));
     } else {
-      // Call AI
-      if (isPhrase) {
-        aiResult = await callAI(word, settings.apiKey, settings.apiEndpoint, settings.model, true, settings.targetLanguage);
+      if (inputType === 'longText') {
+        aiResult = await callAITranslate(word, settings.apiKey, settings.apiEndpoint, settings.model, settings.targetLanguage);
       } else {
-        aiResult = await callAI(word, settings.apiKey, settings.apiEndpoint, settings.model, false, settings.targetLanguage);
+        aiResult = await callAIEnrich(word, settings.apiKey, settings.apiEndpoint, settings.model, inputType, settings.targetLanguage);
       }
-      // Store in cache if successful
       if (aiResult.success) {
         db.aiCache[cacheKey] = { response: aiResult, timestamp: Date.now() };
       }
@@ -1151,101 +1434,244 @@ function setupIPC() {
 
     // ── Dictionary (only for single words) ──
     let dictResult;
-    if (isPhrase) {
-      dictResult = { success: false, error: 'Phrase mode — using AI translation' };
-    } else {
+    if (inputType === 'singleWord') {
       dictResult = await lookupDictionary(word);
+    } else {
+      dictResult = { success: false, error: `${inputType} mode` };
     }
 
     // ── Related words ──
     const relatedWords = settings.showRelatedWords !== false
-      ? findRelatedWords(
-        word,
-        aiResult.success ? aiResult.topic : '',
-        aiResult.success ? aiResult.relatedTerms : [],
-        db.words
-      )
+      ? findRelatedWords(word, aiResult.success ? aiResult.topic : '', aiResult.success ? aiResult.relatedTerms : [], db.words)
       : [];
 
-    // ── Lookup History (always saved) ──
-    db.lookupHistory.push({
-      word: word,
-      isPhrase: isPhrase,
-      timestamp: new Date().toISOString(),
-      cached: usedCache,
-    });
-    if (db.lookupHistory.length > 1000) {
-      db.lookupHistory = db.lookupHistory.slice(-1000);
-    }
+    // ── Lookup History ──
+    db.lookupHistory.push({ word, isPhrase, inputType, timestamp: new Date().toISOString(), cached: usedCache });
+    if (db.lookupHistory.length > 1000) db.lookupHistory = db.lookupHistory.slice(-1000);
 
-    // ── Stats (always updated) ──
+    // ── Stats ──
     const today = getLocalDateStr();
     db.stats.totalLookups++;
     if (db.stats.lastActiveDate === today) {
       db.stats.todayLookups++;
     } else {
       const yesterdayStr = getLocalDateStr(new Date(Date.now() - 86400000));
-      if (db.stats.lastActiveDate === yesterdayStr) {
-        db.stats.streak++;
-      } else if (db.stats.lastActiveDate !== today) {
-        db.stats.streak = 1;
-      }
+      if (db.stats.lastActiveDate === yesterdayStr) db.stats.streak++;
+      else if (db.stats.lastActiveDate !== today) db.stats.streak = 1;
       db.stats.todayLookups = 1;
       db.stats.lastActiveDate = today;
     }
 
-    // ── Word save (only if autoSave) ──
+    // ── Word save ──
     let savedWordId = null, savedLookupCount = 0, savedIsFavorite = false, savedUserNote = '';
-    if (settings.autoSave) {
-      const existingIdx = db.words.findIndex((w) => w.word.toLowerCase() === word.toLowerCase());
+    let extractedWords = [];
 
-      const wordEntry = {
-        id: existingIdx >= 0 ? db.words[existingIdx].id : crypto.randomUUID(),
-        word: word,
-        phonetic: dictResult.success ? dictResult.phonetic : (existingIdx >= 0 ? db.words[existingIdx].phonetic : ''),
-        audioUrl: dictResult.success ? dictResult.audioUrl : (existingIdx >= 0 ? db.words[existingIdx].audioUrl : ''),
-        meanings: dictResult.success ? dictResult.meanings : (existingIdx >= 0 ? db.words[existingIdx].meanings : []),
-        technicalNote: aiResult.success ? aiResult.definition : (existingIdx >= 0 ? db.words[existingIdx].technicalNote : ''),
-        translatedMeaning: aiResult.success ? aiResult.translatedMeaning : (existingIdx >= 0 ? (db.words[existingIdx].translatedMeaning || db.words[existingIdx].vietnameseMeaning) : ''),
-        vietnameseMeaning: aiResult.success ? aiResult.translatedMeaning : (existingIdx >= 0 ? db.words[existingIdx].vietnameseMeaning : ''),
-        topic: aiResult.success ? aiResult.topic : (existingIdx >= 0 ? db.words[existingIdx].topic : ''),
-        tags: aiResult.success ? (aiResult.relatedTerms || []) : (existingIdx >= 0 ? db.words[existingIdx].tags : []),
-        relatedTerms: aiResult.success ? (aiResult.relatedTerms || []) : (existingIdx >= 0 ? db.words[existingIdx].relatedTerms : []),
-        userNote: existingIdx >= 0 ? db.words[existingIdx].userNote : '',
-        isFavorite: existingIdx >= 0 ? db.words[existingIdx].isFavorite : false,
-        lookupCount: existingIdx >= 0 ? db.words[existingIdx].lookupCount + 1 : 1,
-        firstLookup: existingIdx >= 0 ? db.words[existingIdx].firstLookup : new Date().toISOString(),
-        lastLookup: new Date().toISOString(),
-        isPhrase: isPhrase,
-        // SRS fields (preserve existing)
-        easeFactor: existingIdx >= 0 ? db.words[existingIdx].easeFactor : 2.5,
-        interval: existingIdx >= 0 ? db.words[existingIdx].interval : 0,
-        repetitions: existingIdx >= 0 ? db.words[existingIdx].repetitions : 0,
-        dueDate: existingIdx >= 0 ? db.words[existingIdx].dueDate : null,
-      };
+    if (settings.autoSave || forceSave) {
+      if (isPhrase) {
+        // ═══ LONG TEXT: extract vocab, save individual words ═══
+        const { words: vocabWords, phrasalVerbs } = extractVocabulary(word);
+        extractedWords = vocabWords;
+        const newWordsToEnrich = [];
+        const wordsToDictionaryEnrich = [];
+        const now = new Date().toISOString();
+        const contextSource = inputType === 'longText' ? 'paragraph' : 'phrase';
 
-      if (existingIdx >= 0) {
-        db.words[existingIdx] = wordEntry;
+        for (const vocabWord of vocabWords) {
+          const existingIdx = db.words.findIndex((w) => w.word.toLowerCase() === vocabWord.toLowerCase());
+          if (existingIdx >= 0) {
+            addContextIfNew(db.words[existingIdx], word, contextSource);
+            db.words[existingIdx].lookupCount = (db.words[existingIdx].lookupCount || 0) + 1;
+            db.words[existingIdx].lastLookup = now;
+            if (needsAIEnrichment(db.words[existingIdx])) {
+              db.words[existingIdx].enrichmentStatus = 'pending';
+              newWordsToEnrich.push(vocabWord);
+            }
+            if (needsDictionaryEnrichment(db.words[existingIdx])) {
+              wordsToDictionaryEnrich.push(vocabWord);
+            }
+          } else {
+            db.words.unshift({
+              id: crypto.randomUUID(), word: vocabWord, phonetic: '', audioUrl: '', meanings: [],
+              technicalNote: '', translatedMeaning: '', vietnameseMeaning: '',
+              topic: '',
+              tags: [], relatedTerms: [], userNote: '', isFavorite: false,
+              lookupCount: 1, firstLookup: now, lastLookup: now, isPhrase: false,
+              easeFactor: 2.5, interval: 0, repetitions: 0, dueDate: null,
+              contexts: [{ sentence: word.length > 300 ? word.slice(0, 300) + '…' : word, source: contextSource, date: now }],
+              synonyms: [], antonyms: [], prepositions: [], verbForms: null, exampleSentence: '', phraseType: '',
+              enrichmentStatus: 'pending',
+              enrichmentVersion: 1,
+            });
+            newWordsToEnrich.push(vocabWord);
+            wordsToDictionaryEnrich.push(vocabWord);
+          }
+        }
+
+        // Attach detected phrasal verbs to the root word entry.
+        for (const pv of phrasalVerbs) {
+          const parentIdx = db.words.findIndex((w) => w.word.toLowerCase() === pv.verb.toLowerCase());
+          if (parentIdx >= 0) {
+            if (!db.words[parentIdx].prepositions) db.words[parentIdx].prepositions = [];
+            if (!db.words[parentIdx].prepositions.some((p) => p.phrase === pv.phrase)) {
+              db.words[parentIdx].prepositions.push({ phrase: pv.phrase, meaning: '', example: '' });
+            }
+          }
+        }
+
+        saveDatabase(db);
+
+        if (wordsToDictionaryEnrich.length > 0) {
+          (async () => {
+            try {
+              const uniqueWords = [...new Set(wordsToDictionaryEnrich)];
+              for (const dictWord of uniqueWords) {
+                const dict = await lookupDictionary(dictWord);
+                if (!dict.success) continue;
+                const freshDb = loadDatabase();
+                const idx = freshDb.words.findIndex((e) => e.word.toLowerCase() === dictWord.toLowerCase());
+                if (idx >= 0) {
+                  mergeDictionaryIntoEntry(freshDb.words[idx], dict);
+                  saveDatabase(freshDb);
+                }
+              }
+            } catch (err) {
+              console.error('Dictionary background enrichment error:', err.message || err);
+            }
+          })();
+        }
+
+        // ═══ Background enrichment (async, non-blocking) ═══
+        if (newWordsToEnrich.length > 0 && settings.apiKey) {
+          // Chunk into batches of 15 to stay within token limits
+          const BATCH_SIZE = 15;
+          const chunks = [];
+          for (let i = 0; i < newWordsToEnrich.length; i += BATCH_SIZE) {
+            chunks.push(newWordsToEnrich.slice(i, i + BATCH_SIZE));
+          }
+
+          (async () => {
+            try {
+              for (const chunk of chunks) {
+                const enrichResult = await callAIBatchEnrich(chunk, word, settings.apiKey, settings.apiEndpoint, settings.model, settings.targetLanguage);
+                const freshDb = loadDatabase();
+
+                if (enrichResult.success && enrichResult.results && enrichResult.results.length > 0) {
+                  for (const enriched of enrichResult.results) {
+                    const wKey = (enriched.word || '').toLowerCase();
+                    if (!wKey) continue;
+                    const idx = freshDb.words.findIndex((e) => e.word.toLowerCase() === wKey);
+                    if (idx < 0) continue;
+                    const entry = freshDb.words[idx];
+                    if (enriched.translatedMeaning) { entry.translatedMeaning = enriched.translatedMeaning; entry.vietnameseMeaning = enriched.translatedMeaning; }
+                    if (enriched.definition) entry.technicalNote = enriched.definition;
+                    if (enriched.topic) entry.topic = normalizeWordTopic(entry.word, enriched.topic);
+                    if (enriched.relatedTerms) { entry.relatedTerms = enriched.relatedTerms; entry.tags = enriched.relatedTerms; }
+                    if (enriched.synonyms && enriched.synonyms.length) entry.synonyms = enriched.synonyms;
+                    if (Array.isArray(enriched.antonyms)) {
+                      if (!entry.antonyms) entry.antonyms = [];
+                      for (const ant of enriched.antonyms) {
+                        const antWord = typeof ant === 'string' ? ant : ant.word;
+                        if (antWord && !entry.antonyms.some((a) => (typeof a === 'string' ? a : a.word) === antWord)) {
+                          entry.antonyms.push(ant);
+                        }
+                      }
+                    }
+                    if (enriched.prepositions && enriched.prepositions.length) {
+                      if (!entry.prepositions) entry.prepositions = [];
+                      for (const prep of enriched.prepositions) {
+                        if (!entry.prepositions.some((p) => p.phrase === prep.phrase)) entry.prepositions.push(prep);
+                      }
+                    }
+                    if (enriched.verbForms) entry.verbForms = enriched.verbForms;
+                    if (enriched.exampleSentence) entry.exampleSentence = enriched.exampleSentence;
+                    if (enriched.phraseType) entry.phraseType = enriched.phraseType;
+                    entry.enrichmentStatus = 'done';
+                    entry.enrichmentVersion = 2;
+                  }
+                }
+
+                // Mark this chunk's remaining pending as failed
+                for (const w of chunk) {
+                  const idx = freshDb.words.findIndex((e) => e.word.toLowerCase() === w.toLowerCase() && e.enrichmentStatus === 'pending');
+                  if (idx >= 0) freshDb.words[idx].enrichmentStatus = 'failed';
+                }
+                saveDatabase(freshDb);
+              }
+              console.log(`✅ Batch enrichment complete: ${newWordsToEnrich.length} words processed in ${chunks.length} chunk(s)`);
+            } catch (err) {
+              console.error('❌ Background enrichment error:', err.message || err);
+              const freshDb = loadDatabase();
+              for (const w of newWordsToEnrich) {
+                const idx = freshDb.words.findIndex((e) => e.word.toLowerCase() === w.toLowerCase() && e.enrichmentStatus === 'pending');
+                if (idx >= 0) freshDb.words[idx].enrichmentStatus = 'failed';
+              }
+              saveDatabase(freshDb);
+            }
+          })();
+        } else if (newWordsToEnrich.length > 0) {
+          // No API key — mark as skipped so Dashboard doesn't show "Enriching…" forever
+          for (const w of newWordsToEnrich) {
+            const idx = db.words.findIndex((e) => e.word.toLowerCase() === w.toLowerCase() && e.enrichmentStatus === 'pending');
+            if (idx >= 0) db.words[idx].enrichmentStatus = 'skipped';
+          }
+          saveDatabase(db);
+        }
       } else {
-        db.words.unshift(wordEntry);
-      }
+        // Single word: save the looked-up word itself.
+        const existingIdx = db.words.findIndex((w) => w.word.toLowerCase() === word.toLowerCase());
+        const existing = existingIdx >= 0 ? db.words[existingIdx] : null;
+        const now = new Date().toISOString();
 
-      savedWordId = wordEntry.id;
-      savedLookupCount = wordEntry.lookupCount;
-      savedIsFavorite = wordEntry.isFavorite;
-      savedUserNote = wordEntry.userNote;
+        const wordEntry = {
+          id: existing ? existing.id : crypto.randomUUID(),
+          word, phonetic: dictResult.success ? dictResult.phonetic : (existing ? existing.phonetic : ''),
+          audioUrl: dictResult.success ? dictResult.audioUrl : (existing ? existing.audioUrl : ''),
+          meanings: dictResult.success ? dictResult.meanings : (existing ? existing.meanings : []),
+          technicalNote: aiResult.success ? aiResult.definition : (existing ? existing.technicalNote : ''),
+          translatedMeaning: aiResult.success ? aiResult.translatedMeaning : (existing ? (existing.translatedMeaning || existing.vietnameseMeaning) : ''),
+          vietnameseMeaning: aiResult.success ? aiResult.translatedMeaning : (existing ? existing.vietnameseMeaning : ''),
+          topic: aiResult.success ? normalizeWordTopic(word, aiResult.topic) : (existing ? existing.topic : ''),
+          tags: aiResult.success ? (aiResult.relatedTerms || []) : (existing ? existing.tags : []),
+          relatedTerms: aiResult.success ? (aiResult.relatedTerms || []) : (existing ? existing.relatedTerms : []),
+          userNote: existing ? existing.userNote : '',
+          isFavorite: existing ? existing.isFavorite : false,
+          lookupCount: existing ? existing.lookupCount + 1 : 1,
+          firstLookup: existing ? existing.firstLookup : now,
+          lastLookup: now, isPhrase,
+          easeFactor: existing ? existing.easeFactor : 2.5,
+          interval: existing ? existing.interval : 0,
+          repetitions: existing ? existing.repetitions : 0,
+          dueDate: existing ? existing.dueDate : null,
+          // V6 fields
+          contexts: existing ? existing.contexts || [] : [],
+          synonyms: aiResult.success && aiResult.synonyms ? aiResult.synonyms : (existing ? existing.synonyms || [] : []),
+          antonyms: aiResult.success && aiResult.antonyms ? aiResult.antonyms : (existing ? existing.antonyms || [] : []),
+          prepositions: aiResult.success && aiResult.prepositions ? aiResult.prepositions : (existing ? existing.prepositions || [] : []),
+          verbForms: aiResult.success && aiResult.verbForms ? aiResult.verbForms : (existing ? existing.verbForms : null),
+          exampleSentence: aiResult.success && aiResult.exampleSentence ? aiResult.exampleSentence : (existing ? existing.exampleSentence || '' : ''),
+          phraseType: aiResult.success && aiResult.phraseType ? aiResult.phraseType : (existing ? existing.phraseType || '' : ''),
+          enrichmentStatus: 'done',
+          enrichmentVersion: aiResult.success ? 2 : (existing ? Number(existing.enrichmentVersion) || 1 : 1),
+        };
+
+        if (dictResult.success) mergeDictionaryIntoEntry(wordEntry, dictResult);
+
+        if (existingIdx >= 0) db.words[existingIdx] = wordEntry;
+        else db.words.unshift(wordEntry);
+
+        savedWordId = wordEntry.id;
+        savedLookupCount = wordEntry.lookupCount;
+        savedIsFavorite = wordEntry.isFavorite;
+        savedUserNote = wordEntry.userNote;
+        saveDatabase(db);
+      }
+    } else {
+      saveDatabase(db);
     }
 
-    // Always save (cache + history + stats, and words if autoSave)
-    saveDatabase(db);
-
     return {
-      dictionary: dictResult,
-      ai: aiResult,
-      relatedWords,
-      isPhrase,
-      usedCache,
-      savedWordId: savedWordId || null,
+      dictionary: dictResult, ai: aiResult, relatedWords, isPhrase, inputType, usedCache,
+      extractedWords, savedWordId: savedWordId || null,
       savedLookupCount: savedLookupCount || 0,
       savedIsFavorite: savedIsFavorite || false,
       savedUserNote: savedUserNote || '',
@@ -1934,6 +2360,16 @@ function saveOcrTextToLibrary(text) {
       interval: 0,
       repetitions: 0,
       dueDate: null,
+      // V6 fields
+      contexts: [],
+      synonyms: [],
+      antonyms: [],
+      prepositions: [],
+      verbForms: null,
+      exampleSentence: '',
+      phraseType: '',
+      enrichmentStatus: 'done',
+      enrichmentVersion: 1,
     });
   }
 

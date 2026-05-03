@@ -116,30 +116,61 @@
 
   // ── Render Results ──
   function renderResult(result, word) {
-    const { dictionary, ai, relatedWords, isPhrase } = result;
+    const { dictionary, ai, relatedWords, isPhrase, inputType } = result;
 
-    // For phrases: truncate the header text
+    // For phrases/longText: truncate the header text
     if (isPhrase && word.length > 40) {
       wordText.textContent = word.slice(0, 40) + '…';
-      wordText.title = word; // full text on hover
+      wordText.title = word;
     }
 
-    // Update tab labels for phrase mode
-    if (isPhrase) {
+    // Update tab labels for phrase/longText mode
+    if (inputType === 'longText') {
       const dictTab = tabBar.querySelector('[data-tab="dictionary"]');
       const techTab = tabBar.querySelector('[data-tab="technical"]');
       if (dictTab) dictTab.textContent = '🌐 Translation';
       if (techTab) techTab.textContent = '📝 Explanation';
-      partOfSpeech.textContent = 'phrase';
+      partOfSpeech.textContent = 'paragraph';
+    } else if (isPhrase) {
+      const dictTab = tabBar.querySelector('[data-tab="dictionary"]');
+      const techTab = tabBar.querySelector('[data-tab="technical"]');
+      if (dictTab) dictTab.textContent = '🌐 Translation';
+      if (techTab) techTab.textContent = '📝 Detail';
+      // Use phraseType from AI if available
+      partOfSpeech.textContent = (ai && ai.success && ai.phraseType) ? ai.phraseType : 'phrase';
     }
 
-    // Dictionary (or Translation for phrases)
-    if (isPhrase && ai && ai.success) {
-      // Show translation in dictionary panel
+    // Show verb forms inline with part-of-speech if available
+    if (ai && ai.success && ai.verbForms && ai.verbForms.v2) {
+      const vfText = `V2: ${ai.verbForms.v2} · V3: ${ai.verbForms.v3 || ai.verbForms.v2}`;
+      const currentPos = partOfSpeech.textContent;
+      partOfSpeech.textContent = currentPos ? `${currentPos} · ${vfText}` : vfText;
+    }
+
+    // Dictionary (or Translation for longText/phrases)
+    if (inputType === 'longText' && ai && ai.success) {
       dictLoader.style.display = 'none';
       dictError.style.display = 'none';
       defList.innerHTML = '';
-
+      const vnTranslation = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
+      if (vnTranslation) {
+        const item = document.createElement('div');
+        item.className = 'definition-item';
+        item.innerHTML = `<div class="definition-text" style="font-size:14px;line-height:1.6;">${tokenizeInline(vnTranslation)}</div>`;
+        defList.appendChild(item);
+      }
+      // Show extracted words count
+      if (result.extractedWords && result.extractedWords.length > 0) {
+        const info = document.createElement('div');
+        info.className = 'definition-item extracted-info';
+        info.innerHTML = `<div class="extracted-badge">📚 ${result.extractedWords.length} words extracted & saved to library</div>`;
+        defList.appendChild(info);
+      }
+      defList.style.display = 'flex';
+    } else if (isPhrase && ai && ai.success) {
+      dictLoader.style.display = 'none';
+      dictError.style.display = 'none';
+      defList.innerHTML = '';
       const vnTranslation = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
       if (vnTranslation) {
         const item = document.createElement('div');
@@ -161,7 +192,6 @@
     if (ai && ai.success) {
       renderTechNote(ai);
 
-      // Show translated meaning in header (for ALL lookups)
       const vnText = ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '';
       if (vnText) {
         vnMeaningText.innerHTML = tokenizeInline(vnText);
@@ -184,7 +214,6 @@
       currentWordId = result.savedWordId;
       lookupCountEl.textContent = result.savedLookupCount ? `×${result.savedLookupCount}` : '';
       btnFav.classList.toggle('active', !!result.savedIsFavorite);
-      // Pre-fill note textarea with existing note
       if (result.savedUserNote) {
         noteTextarea.value = result.savedUserNote;
       }
@@ -251,6 +280,14 @@
               meaning.synonyms.map((s) => `<span class="syn-chip" data-word="${escAttr(s)}">${escHtml(s)}</span>`).join('');
             defList.appendChild(synRow);
           }
+
+          if (meaning.antonyms && meaning.antonyms.length > 0) {
+            const antRow = document.createElement('div');
+            antRow.className = 'synonyms-row antonyms-row';
+            antRow.innerHTML = `<span class="syn-label">ant</span>` +
+              meaning.antonyms.map((a) => `<span class="ant-chip" data-word="${escAttr(a)}">${escHtml(a)}</span>`).join('');
+            defList.appendChild(antRow);
+          }
         }
       }
     }
@@ -260,12 +297,64 @@
   function renderTechNote(ai) {
     techLoader.style.display = 'none';
 
+    // Clear any previously appended dynamic sections
+    techContent.querySelectorAll('.dynamic-section').forEach((el) => el.remove());
+
     techDef.innerHTML = tokenizeInline(ai.definition || '');
     techVnText.innerHTML = tokenizeInline(ai.translatedMeaning || ai.translation || ai.vietnameseMeaning || '');
 
     if (ai.topic) {
       topicBadge.textContent = ai.topic;
       topicBadge.style.display = 'inline-flex';
+    }
+
+    // ── Synonyms with Vietnamese meanings ──
+    if (ai.synonyms && ai.synonyms.length > 0) {
+      const sec = document.createElement('div');
+      sec.className = 'dynamic-section synonyms-section';
+      sec.innerHTML = '<div class="section-title">📝 Synonyms</div>' +
+        ai.synonyms.map((s) => {
+          const word = typeof s === 'string' ? s : (s.word || '');
+          const meaning = typeof s === 'string' ? '' : (s.meaning || '');
+          return `<div class="synonym-item"><span class="syn-chip" data-word="${escAttr(word)}">${escHtml(word)}</span>${meaning ? `<span class="syn-meaning">— ${escHtml(meaning)}</span>` : ''}</div>`;
+        }).join('');
+      techContent.appendChild(sec);
+    }
+
+    // Antonyms with Vietnamese meanings
+    if (ai.antonyms && ai.antonyms.length > 0) {
+      const sec = document.createElement('div');
+      sec.className = 'dynamic-section antonyms-section';
+      sec.innerHTML = '<div class="section-title">Antonyms</div>' +
+        ai.antonyms.map((a) => {
+          const word = typeof a === 'string' ? a : (a.word || '');
+          const meaning = typeof a === 'string' ? '' : (a.meaning || '');
+          return `<div class="antonym-item"><span class="ant-chip" data-word="${escAttr(word)}">${escHtml(word)}</span>${meaning ? `<span class="ant-meaning">— ${escHtml(meaning)}</span>` : ''}</div>`;
+        }).join('');
+      techContent.appendChild(sec);
+    }
+
+    // ── Prepositions / Phrasal Verbs ──
+    if (ai.prepositions && ai.prepositions.length > 0) {
+      const sec = document.createElement('div');
+      sec.className = 'dynamic-section prepositions-section';
+      sec.innerHTML = '<div class="section-title">🔗 Prepositions</div>' +
+        ai.prepositions.map((p) => {
+          let html = `<div class="prep-item"><span class="prep-phrase" data-word="${escAttr(p.phrase)}">${escHtml(p.phrase)}</span>`;
+          if (p.meaning) html += `<span class="prep-meaning">→ ${escHtml(p.meaning)}</span>`;
+          if (p.example) html += `<div class="prep-example">"${escHtml(p.example)}"</div>`;
+          html += '</div>';
+          return html;
+        }).join('');
+      techContent.appendChild(sec);
+    }
+
+    // ── Example Sentence ──
+    if (ai.exampleSentence) {
+      const sec = document.createElement('div');
+      sec.className = 'dynamic-section example-section';
+      sec.innerHTML = `<div class="section-title">💬 Example</div><div class="example-sentence">${tokenizeInline(ai.exampleSentence)}</div>`;
+      techContent.appendChild(sec);
     }
 
     techContent.style.display = 'block';
@@ -502,7 +591,7 @@
 
   // ── Chip click → re-lookup ──
   document.addEventListener('click', (e) => {
-    const chip = e.target.closest('.syn-chip, .related-chip');
+    const chip = e.target.closest('.syn-chip, .ant-chip, .related-chip, .prep-phrase');
     if (chip && chip.dataset.word) {
       resetUI();
       const word = chip.dataset.word;
@@ -596,12 +685,20 @@
       return;
     }
 
+    if (text.split(/\s+/).length > 1) {
+      const result = await window.eld.lookupWord(text, { forceSave: true });
+      const count = result && result.extractedWords ? result.extractedWords.length : 0;
+      setReadingStatus(count ? `Saved ${count} words from selection.` : 'No vocabulary words found to save.');
+      await renderReadingMode();
+      return;
+    }
+
     const result = await window.eld.importWords({
       content: JSON.stringify([{
         word: text,
         topic: 'Reading',
-        technicalNote: text.split(/\s+/).length > 1 ? 'Saved sentence from Overlay Reading.' : 'Saved word from Overlay Reading.',
-        isPhrase: text.split(/\s+/).length > 1,
+        technicalNote: 'Saved word from Overlay Reading.',
+        isPhrase: false,
       }]),
       format: 'json',
       filename: 'overlay-reading.json',
@@ -805,6 +902,18 @@
       const sec = document.createElement('div');
       sec.className = 'lookup-section';
       sec.innerHTML = `<div class="lookup-section-title">Definition</div><div class="lookup-section-body">${tokenizeInline(ai.definition)}</div>`;
+      lookupBody.appendChild(sec);
+    }
+
+    if (ai && ai.success && ai.antonyms && ai.antonyms.length > 0) {
+      const sec = document.createElement('div');
+      sec.className = 'lookup-section';
+      sec.innerHTML = `<div class="lookup-section-title">Antonyms</div><div class="lookup-section-body">` +
+        ai.antonyms.map((a) => {
+          const antWord = typeof a === 'string' ? a : (a.word || '');
+          const meaning = typeof a === 'string' ? '' : (a.meaning || '');
+          return `<span class="ant-chip" data-word="${escAttr(antWord)}">${escHtml(antWord)}${meaning ? ` - ${escHtml(meaning)}` : ''}</span>`;
+        }).join('') + '</div>';
       lookupBody.appendChild(sec);
     }
 

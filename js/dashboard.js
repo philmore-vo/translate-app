@@ -103,6 +103,28 @@
     $('#search-input').addEventListener('input', debounce(renderLibrary, 200));
     $('#filter-topic').addEventListener('change', renderLibrary);
     $('#filter-sort').addEventListener('change', renderLibrary);
+
+    $('#word-grid').addEventListener('click', (e) => {
+      const audioBtn = e.target.closest('.wc-audio-btn');
+      if (audioBtn) {
+        e.stopPropagation();
+        playPronunciation(audioBtn.dataset.word, audioBtn.dataset.audio);
+        return;
+      }
+
+      const card = e.target.closest('.word-card');
+      if (!card) return;
+      const wordId = card.dataset.id;
+      if (!wordId) return;
+
+      if (selectMode) {
+        toggleSelection(wordId, card);
+        return;
+      }
+
+      const word = allWords.find((w) => w.id === wordId);
+      if (word) showWordDetail(word);
+    });
   }
 
   async function renderLibrary() {
@@ -164,25 +186,6 @@
     } else {
       emptyState.style.display = 'none';
       grid.innerHTML = filtered.map((w) => renderWordCard(w)).join('');
-
-      // Attach click handlers
-      grid.querySelectorAll('.word-card').forEach((card) => {
-        card.addEventListener('click', (e) => {
-          const audioBtn = e.target.closest('.wc-audio-btn');
-          if (audioBtn) {
-            e.stopPropagation();
-            playPronunciation(audioBtn.dataset.word, audioBtn.dataset.audio);
-            return;
-          }
-          const wordId = card.dataset.id;
-          if (selectMode) {
-            toggleSelection(wordId, card);
-            return;
-          }
-          const word = allWords.find((w) => w.id === wordId);
-          if (word) showWordDetail(word);
-        });
-      });
     }
   }
 
@@ -251,13 +254,89 @@
       }
     }
 
+    // V6 enrichment sections
+    let phraseTypeHtml = '';
+    if (w.phraseType) {
+      phraseTypeHtml = `<span class="md-phrase-type">${escHtml(w.phraseType)}</span>`;
+    }
+
+    let verbFormsHtml = '';
+    if (w.verbForms && w.verbForms.v2) {
+      verbFormsHtml = `<div class="md-verb-forms">V2: <strong>${escHtml(w.verbForms.v2)}</strong> · V3: <strong>${escHtml(w.verbForms.v3 || w.verbForms.v2)}</strong></div>`;
+    }
+
+    let synonymsHtml = '';
+    if (w.synonyms && w.synonyms.length > 0) {
+      synonymsHtml = `<div class="md-section">
+        <div class="md-section-title">📝 Synonyms</div>
+        <div class="md-synonyms">${w.synonyms.map((s) => {
+          const word = typeof s === 'string' ? s : (s.word || '');
+          const meaning = typeof s === 'string' ? '' : (s.meaning || '');
+          return `<div class="md-syn-item"><button class="md-tag md-related-chip" data-word="${escAttr(word)}" type="button">${escHtml(word)}</button>${meaning ? `<span class="md-syn-meaning">— ${escHtml(meaning)}</span>` : ''}</div>`;
+        }).join('')}</div>
+      </div>`;
+    }
+
+    let antonymsHtml = '';
+    if (w.antonyms && w.antonyms.length > 0) {
+      antonymsHtml = `<div class="md-section">
+        <div class="md-section-title">Antonyms</div>
+        <div class="md-antonyms">${w.antonyms.map((a) => {
+          const word = typeof a === 'string' ? a : (a.word || '');
+          const meaning = typeof a === 'string' ? '' : (a.meaning || '');
+          return `<div class="md-ant-item"><button class="md-tag md-related-chip" data-word="${escAttr(word)}" type="button">${escHtml(word)}</button>${meaning ? `<span class="md-ant-meaning">— ${escHtml(meaning)}</span>` : ''}</div>`;
+        }).join('')}</div>
+      </div>`;
+    }
+
+    let prepositionsHtml = '';
+    if (w.prepositions && w.prepositions.length > 0) {
+      prepositionsHtml = `<div class="md-section">
+        <div class="md-section-title">🔗 Prepositions</div>
+        ${w.prepositions.map((p) => {
+          let html = `<div class="md-prep-item"><strong class="md-related-chip" data-word="${escAttr(p.phrase)}">${escHtml(p.phrase)}</strong>`;
+          if (p.meaning) html += ` <span class="md-prep-meaning">→ ${escHtml(p.meaning)}</span>`;
+          if (p.example) html += `<div class="md-prep-example">"${escHtml(p.example)}"</div>`;
+          html += '</div>';
+          return html;
+        }).join('')}
+      </div>`;
+    }
+
+    let exampleHtml = '';
+    if (w.exampleSentence) {
+      exampleHtml = `<div class="md-section">
+        <div class="md-section-title">💬 Example</div>
+        <div class="md-example">"${escHtml(w.exampleSentence)}"</div>
+      </div>`;
+    }
+
+    let contextsHtml = '';
+    if (w.contexts && w.contexts.length > 0) {
+      contextsHtml = `<div class="md-section">
+        <div class="md-section-title">📌 Contexts (${w.contexts.length})</div>
+        ${w.contexts.slice(-3).map((c) => `<div class="md-context-item">"${escHtml((c.sentence || '').slice(0, 120))}${(c.sentence || '').length > 120 ? '…' : ''}"<span class="md-context-source">${escHtml(c.source || '')} · ${formatDate(c.date)}</span></div>`).join('')}
+      </div>`;
+    }
+
+    let enrichmentBadge = '';
+    if (w.enrichmentStatus === 'pending') {
+      enrichmentBadge = '<span class="md-enrich-badge pending">⏳ Enriching…</span>';
+    } else if (w.enrichmentStatus === 'failed') {
+      enrichmentBadge = '<span class="md-enrich-badge failed">⚠️ Enrichment failed</span>';
+    } else if (w.enrichmentStatus === 'skipped') {
+      enrichmentBadge = '<span class="md-enrich-badge skipped">AI enrichment skipped</span>';
+    }
+
     const relatedTerms = getRelatedTerms(w);
 
     body.innerHTML = `
       <div class="md-header-row">
         <div>
-          <div class="md-word">${escHtml(w.word)}</div>
+          <div class="md-word">${escHtml(w.word)} ${enrichmentBadge}</div>
           ${w.phonetic ? `<div class="md-phonetic">${escHtml(w.phonetic)}</div>` : ''}
+          ${phraseTypeHtml}
+          ${verbFormsHtml}
         </div>
         <button class="btn-audio-inline" id="modal-btn-audio" data-word="${escAttr(w.word)}" data-audio="${escAttr(w.audioUrl || '')}" title="Pronounce">
           🔊
@@ -278,6 +357,12 @@
           <div class="md-tech">${escHtml(w.technicalNote)}</div>
         </div>
       ` : ''}
+
+      ${synonymsHtml}
+      ${antonymsHtml}
+      ${prepositionsHtml}
+      ${exampleHtml}
+      ${contextsHtml}
 
       ${w.topic ? `<div class="md-topic"># ${escHtml(w.topic)}</div>` : ''}
 
@@ -426,6 +511,38 @@
     $('#fc-tech').textContent = card.technicalNote || '';
     const meaning = card.translatedMeaning || card.vietnameseMeaning || '';
     $('#fc-vn').textContent = meaning ? `🌐 ${meaning}` : '';
+
+    // V6 enrichment data for flashcard back
+    let extraHtml = '';
+    if (card.verbForms && card.verbForms.v2) {
+      extraHtml += `<div class="fc-verb-forms">V2: <strong>${escHtml(card.verbForms.v2)}</strong> · V3: <strong>${escHtml(card.verbForms.v3 || card.verbForms.v2)}</strong></div>`;
+    }
+    if (card.prepositions && card.prepositions.length > 0) {
+      extraHtml += `<div class="fc-prepositions">${card.prepositions.slice(0, 4).map((p) =>
+        `<span class="fc-prep-chip">${escHtml(p.phrase)}${p.meaning ? ` → ${escHtml(p.meaning)}` : ''}</span>`
+      ).join('')}</div>`;
+    }
+    if (card.antonyms && card.antonyms.length > 0) {
+      extraHtml += `<div class="fc-antonyms"><span class="fc-extra-label">Antonyms</span>${card.antonyms.slice(0, 4).map((a) => {
+        const word = typeof a === 'string' ? a : (a.word || '');
+        const meaning = typeof a === 'string' ? '' : (a.meaning || '');
+        return `<span class="fc-ant-chip">${escHtml(word)}${meaning ? ` - ${escHtml(meaning)}` : ''}</span>`;
+      }).join('')}</div>`;
+    }
+    if (card.exampleSentence) {
+      extraHtml += `<div class="fc-example">"${escHtml(card.exampleSentence)}"</div>`;
+    }
+
+    // Inject V6 data into flashcard back
+    const fcExtra = document.getElementById('fc-extra') || (() => {
+      const el = document.createElement('div');
+      el.id = 'fc-extra';
+      const fcBack = $('#flashcard-back');
+      if (fcBack) fcBack.appendChild(el);
+      return el;
+    })();
+    fcExtra.innerHTML = extraHtml;
+
     const relatedTerms = getRelatedTerms(card);
     $('#fc-related').innerHTML = relatedTerms.length
       ? `<div class="fc-related-label">Related</div>${relatedTerms.map((term) => `<button class="fc-related-chip" data-word="${escAttr(term)}" type="button">${escHtml(term)}</button>`).join('')}`
@@ -580,6 +697,14 @@
       html += `<div class="lr-tech">${escHtml(ai.definition)}</div></div>`;
     }
 
+    if (ai && ai.success && ai.antonyms && ai.antonyms.length) {
+      html += `<div class="lr-section"><div class="lr-section-title">Antonyms</div><div class="lr-chip-row">${ai.antonyms.map((a) => {
+        const antWord = typeof a === 'string' ? a : (a.word || '');
+        const meaning = typeof a === 'string' ? '' : (a.meaning || '');
+        return `<button class="lookup-related-chip" data-word="${escAttr(antWord)}" type="button">${escHtml(antWord)}${meaning ? ` - ${escHtml(meaning)}` : ''}</button>`;
+      }).join('')}</div></div>`;
+    }
+
     if (isPhrase && translated) {
       html += `<div class="lr-section"><div class="lr-section-title">Translation</div><div class="lr-def">${escHtml(translated)}</div></div>`;
     } else if (dictionary && dictionary.success) {
@@ -593,6 +718,10 @@
         const synonyms = (m.synonyms || []).slice(0, 8);
         if (synonyms.length) {
           html += `<div class="lr-chip-row">${synonyms.map((s) => `<button class="lookup-related-chip" data-word="${escAttr(s)}" type="button">${escHtml(s)}</button>`).join('')}</div>`;
+        }
+        const antonyms = (m.antonyms || []).slice(0, 8);
+        if (antonyms.length) {
+          html += `<div class="lr-chip-row">${antonyms.map((a) => `<button class="lookup-related-chip" data-word="${escAttr(a)}" type="button">${escHtml(a)}</button>`).join('')}</div>`;
         }
       }
       html += '</div>';
@@ -769,13 +898,22 @@
       return;
     }
 
+    if (text.split(/\s+/).length > 1) {
+      const result = await window.eld.lookupWord(text, { forceSave: true });
+      const count = result && result.extractedWords ? result.extractedWords.length : 0;
+      allWords = await window.eld.getAllWords();
+      await renderReadingMode();
+      setReadingStatus(count ? `Saved ${count} words from selection.` : 'No vocabulary words found to save.', !count);
+      return;
+    }
+
     const result = await window.eld.importWords({
       content: JSON.stringify([{
         word: text,
         topic: 'Reading',
         relatedTerms: [],
-        technicalNote: mode === 'phrase' ? 'Saved phrase from Reading Mode.' : 'Saved word from Reading Mode.',
-        isPhrase: text.split(/\s+/).length > 1,
+        technicalNote: 'Saved word from Reading Mode.',
+        isPhrase: false,
       }]),
       format: 'json',
       filename: 'reading-mode.json',

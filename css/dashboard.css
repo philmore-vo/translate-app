@@ -1661,3 +1661,201 @@ a:hover { text-decoration: underline; }
 .md-note-editor::placeholder { color: var(--text-muted); }
 .md-note-saved { font-size: 11px; color: var(--green); font-weight: 600; opacity: 0; transition: opacity 0.3s; }
 .md-note-saved.show { opacity: 1; }
+
+/* ═══ V6 ENRICHMENT — WORD DETAIL MODAL ═══ */
+.md-phrase-type {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cyan);
+  background: var(--cyan-bg, rgba(126, 200, 227, 0.15));
+  padding: 2px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 2px;
+}
+
+.md-verb-forms {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.md-verb-forms strong {
+  color: var(--accent);
+}
+
+.md-synonyms {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.md-syn-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.md-syn-meaning {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.md-antonyms {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.md-ant-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.md-ant-meaning {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.md-prep-item {
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  border-left: 3px solid var(--accent-light, #b794f6);
+}
+
+.md-prep-meaning {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.md-prep-example {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.md-example {
+  font-size: 13px;
+  line-height: 1.6;
+  font-style: italic;
+  color: var(--text-secondary);
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--orange, #FFB347);
+}
+
+.md-context-item {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+}
+
+.md-context-source {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.md-enrich-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.md-enrich-badge.pending {
+  color: var(--orange, #FFB347);
+  background: var(--orange-bg, rgba(255, 179, 71, 0.15));
+}
+
+.md-enrich-badge.failed {
+  color: var(--red, #FF6B6B);
+  background: var(--red-bg, rgba(255, 107, 107, 0.15));
+}
+
+.md-enrich-badge.skipped {
+  color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+/* ═══ V6 ENRICHMENT — FLASHCARD ═══ */
+.fc-verb-forms {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.fc-verb-forms strong {
+  color: var(--accent);
+}
+
+.fc-prepositions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.fc-prep-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border);
+  border-radius: 20px;
+  color: var(--text-secondary);
+}
+
+.fc-antonyms {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.fc-extra-label {
+  width: 100%;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.fc-ant-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  background: var(--bg-elevated);
+  border: 1px dashed var(--orange, #FFB347);
+  border-radius: 20px;
+  color: var(--text-secondary);
+}
+
+.fc-example {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-muted);
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--orange, #FFB347);
+}
