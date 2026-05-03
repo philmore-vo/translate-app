@@ -20,7 +20,7 @@
   let pendingImportMode = null;
   let readingSelection = { word: '', sentence: '', paragraph: '' };
   let lastHealthReport = null;
-  const ABOUT_LETTER_KEY = 'engilink-about-letter-revealed';
+  let aboutLetterVisible = false;
 
   /* ══════════════════════════════════
      INITIALIZATION
@@ -1020,13 +1020,19 @@
     if (!trigger || !letter) return;
 
     const reveal = () => {
+      aboutLetterVisible = true;
       letter.style.display = 'block';
       trigger.classList.add('revealed');
-      trigger.textContent = 'Opened';
-      localStorage.setItem(ABOUT_LETTER_KEY, 'true');
+      trigger.textContent = 'opened';
+      trigger.setAttribute('aria-expanded', 'true');
     };
 
-    if (localStorage.getItem(ABOUT_LETTER_KEY) === 'true') {
+    letter.style.display = aboutLetterVisible ? 'block' : 'none';
+    trigger.classList.toggle('revealed', aboutLetterVisible);
+    trigger.textContent = aboutLetterVisible ? 'opened' : 'open';
+    trigger.setAttribute('aria-expanded', aboutLetterVisible ? 'true' : 'false');
+
+    if (aboutLetterVisible) {
       reveal();
     }
 
@@ -1112,6 +1118,7 @@
         showRelatedWords: $('#setting-related').checked,
         theme: $('#setting-theme-dark').checked ? 'dark' : 'light',
         ocrLanguage: $('#setting-ocr-language').value || 'eng',
+        pronunciationAccent: $('#setting-pronunciation-accent').value || 'en-US',
       };
 
       // Update hotkeys transactionally first
@@ -1211,6 +1218,7 @@
     $('#setting-autosave').checked = settings.autoSave !== false;
     $('#setting-related').checked = settings.showRelatedWords !== false;
     $('#setting-ocr-language').value = settings.ocrLanguage || 'eng';
+    $('#setting-pronunciation-accent').value = settings.pronunciationAccent || 'en-US';
     // Hotkeys
     if (settings.hotkeys) {
       $('#setting-hotkey-lookup').value = settings.hotkeys.lookup || 'CommandOrControl+Shift+Z';
@@ -1493,9 +1501,33 @@
     if (!word || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(word);
-    utterance.lang = 'en-US';
+    applyPronunciationVoice(utterance);
     utterance.rate = 0.9;
     window.speechSynthesis.speak(utterance);
+  }
+
+  function applyPronunciationVoice(utterance) {
+    const accent = settings.pronunciationAccent || 'en-US';
+    utterance.lang = accent;
+    const voice = pickPronunciationVoice(accent);
+    if (voice) utterance.voice = voice;
+  }
+
+  function pickPronunciationVoice(accent) {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices();
+    const preferredLang = accent === 'en-GB' ? 'en-GB' : 'en-US';
+    const preferredNames = preferredLang === 'en-GB'
+      ? /(uk|gb|british|england|united kingdom|daniel|sonia|george|libby|google uk)/i
+      : /(us|american|united states|aria|guy|jenny|zira|david|mark|samantha|alex|google us)/i;
+    return voices.find((v) => v.lang === preferredLang && preferredNames.test(v.name))
+      || voices.find((v) => v.lang === preferredLang)
+      || voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('en-'))
+      || null;
+  }
+
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
   }
 
   function openOverlayLookup(word) {

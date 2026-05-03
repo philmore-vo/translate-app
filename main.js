@@ -37,6 +37,7 @@ const DEFAULT_DATA = {
     overlayMaxHeight: 520,
     theme: 'light',
     ocrLanguage: 'eng',
+    pronunciationAccent: 'en-US',
     onboardingCompleted: false,
     onboardingCompletedAt: '',
     lastHealthCheckAt: '',
@@ -902,7 +903,7 @@ function exportWordsFromDatabase(options = {}) {
   };
 }
 
-function lookupDictionary(word) {
+function lookupDictionary(word, pronunciationAccent = 'en-US') {
   return new Promise((resolve) => {
     const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase().trim())}`;
 
@@ -914,11 +915,13 @@ function lookupDictionary(word) {
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed) && parsed.length > 0) {
             const entry = parsed[0];
+            const audioUrls = extractAudioUrls(entry.phonetics || []);
             resolve({
               success: true,
               word: entry.word,
-              phonetic: entry.phonetic || (entry.phonetics && entry.phonetics[0] && entry.phonetics[0].text) || '',
-              audioUrl: extractAudioUrl(entry.phonetics || []),
+              phonetic: extractPhoneticText(entry.phonetics || [], pronunciationAccent) || entry.phonetic || '',
+              audioUrl: pickPronunciationAudio(audioUrls, pronunciationAccent),
+              audioUrls,
               meanings: (entry.meanings || []).map((m) => ({
                 partOfSpeech: m.partOfSpeech,
                 definitions: (m.definitions || []).slice(0, 3).map((d) => ({
@@ -945,15 +948,49 @@ function lookupDictionary(word) {
   });
 }
 
-function extractAudioUrl(phonetics) {
+function normalizeAudioUrl(url) {
+  if (!url) return '';
+  return url.startsWith('//') ? 'https:' + url : url;
+}
+
+function getPronunciationVariant(text) {
+  const haystack = String(text || '').toLowerCase();
+  if (/(^|[-_/\s])us($|[-_.\s/])|en-us|american/.test(haystack)) return 'us';
+  if (/(^|[-_/\s])(uk|gb)($|[-_.\s/])|en-gb|british/.test(haystack)) return 'uk';
+  return '';
+}
+
+function extractAudioUrls(phonetics) {
+  const result = { us: '', uk: '', default: '' };
   for (const p of phonetics) {
     if (p.audio && p.audio.length > 0) {
-      let url = p.audio;
-      if (url.startsWith('//')) url = 'https:' + url;
-      return url;
+      const url = normalizeAudioUrl(p.audio);
+      if (!result.default) result.default = url;
+      const variant = getPronunciationVariant(`${p.audio} ${p.sourceUrl || ''} ${p.text || ''}`);
+      if (variant === 'us' && !result.us) result.us = url;
+      if (variant === 'uk' && !result.uk) result.uk = url;
     }
   }
-  return '';
+  return result;
+}
+
+function pickPronunciationAudio(audioUrls, pronunciationAccent) {
+  if (!audioUrls) return '';
+  return pronunciationAccent === 'en-GB'
+    ? audioUrls.uk || audioUrls.us || audioUrls.default || ''
+    : audioUrls.us || audioUrls.uk || audioUrls.default || '';
+}
+
+function extractPhoneticText(phonetics, pronunciationAccent) {
+  const preferred = pronunciationAccent === 'en-GB' ? 'uk' : 'us';
+  const fallback = [];
+  for (const p of phonetics || []) {
+    if (!p.text) continue;
+    const variant = getPronunciationVariant(`${p.audio || ''} ${p.sourceUrl || ''} ${p.text || ''}`);
+    if (variant === preferred) return p.text;
+    fallback.push(p.text);
+  }
+  return fallback[0] || '';
 }
 
 /* ══════════════════════════════════════════════
@@ -1435,7 +1472,7 @@ function setupIPC() {
     // ── Dictionary (only for single words) ──
     let dictResult;
     if (inputType === 'singleWord') {
-      dictResult = await lookupDictionary(word);
+      dictResult = await lookupDictionary(word, settings.pronunciationAccent);
     } else {
       dictResult = { success: false, error: `${inputType} mode` };
     }
@@ -1525,7 +1562,7 @@ function setupIPC() {
             try {
               const uniqueWords = [...new Set(wordsToDictionaryEnrich)];
               for (const dictWord of uniqueWords) {
-                const dict = await lookupDictionary(dictWord);
+                const dict = await lookupDictionary(dictWord, settings.pronunciationAccent);
                 if (!dict.success) continue;
                 const freshDb = loadDatabase();
                 const idx = freshDb.words.findIndex((e) => e.word.toLowerCase() === dictWord.toLowerCase());

@@ -60,7 +60,7 @@
 | 📚 **Library** | Lưu từ đã tra, ghi chú cá nhân, contexts, topic và dữ liệu enrichment |
 | 🎓 **Study (SRS)** | Học flashcard theo thuật toán SM-2, có Again/Hard/Good/Easy và dữ liệu mở rộng khi reveal |
 | 📜 **History** | Timeline các lần tra gần đây, click để mở lại overlay |
-| 🔊 **Pronunciation** | Phát âm online (audio API) + offline TTS fallback |
+| 🔊 **Pronunciation** | Phát âm online (ưu tiên giọng Mỹ `en-US`) + offline TTS fallback, có thể đổi sang giọng Anh `en-GB` |
 | 🌙 **Dark Mode** | Giao diện tối/sáng cho Dashboard, Overlay và Spotlight |
 | 📊 **Statistics** | Activity heatmap kiểu GitHub, thống kê tiến độ học |
 | 💾 **Backup / Restore** | Export full database, auto-backup trước thao tác lớn |
@@ -181,6 +181,7 @@ Sau khi onboarding, vào **Settings** để hoàn thiện:
 - **Target Language:** ngôn ngữ đích bạn muốn dịch sang (Vietnamese, Japanese, Korean…)
 - **Hotkeys:** đổi phím tắt nếu trùng với app khác
 - **OCR Language:** mặc định English (offline). Có thể thêm `vie.traineddata`, `jpn.traineddata`… vào thư mục resources
+- **Pronunciation voice:** chọn **American English (US)** hoặc **British English (UK)** cho phát âm
 
 > 💡 Sau khi đổi key/model, luôn bấm **🧪 Test Connection** trước khi save.
 
@@ -195,7 +196,7 @@ Sau khi onboarding, vào **Settings** để hoàn thiện:
 3. Overlay nhỏ hiện ra với:
    - 🌐 Bản dịch + giải thích AI
    - 📚 Định nghĩa từ điển
-   - 🔊 Phát âm
+   - 🔊 Phát âm giọng Mỹ mặc định, có thể đổi sang giọng Anh trong Settings
    - 🔗 Related words / synonyms / antonyms (click để tra tiếp)
    - 🧠 Prepositions/phrasal verbs, V2/V3 và example sentence nếu có
    - 💾 Tự lưu vào Library nếu bật Auto-save

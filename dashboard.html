@@ -398,6 +398,16 @@
                 <option value="tha">Thai</option>
               </select>
             </div>
+            <div class="setting-row">
+              <label class="setting-label" for="setting-pronunciation-accent">
+                <span>Pronunciation voice</span>
+                <span class="setting-desc">Choose the preferred English accent for dictionary audio and TTS fallback.</span>
+              </label>
+              <select id="setting-pronunciation-accent" class="setting-input" style="max-width:260px;">
+                <option value="en-US">American English (US)</option>
+                <option value="en-GB">British English (UK)</option>
+              </select>
+            </div>
             <span class="save-status" id="hotkey-status"></span>
           </div>
 
@@ -503,7 +513,7 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                 About
               </span>
-              <button class="about-secret-trigger" id="btn-about-letter" type="button" title="Open a note from the creator">About</button>
+              <button class="about-secret-trigger" id="btn-about-letter" type="button" title="Open a note from the creator" aria-controls="about-letter" aria-expanded="false">open</button>
             </h3>
             <div class="about-letter" id="about-letter" style="display:none;">
               <p>Gửi bạn,</p>
@@ -514,7 +524,7 @@
               <p class="about-letter-signature">- Vo Trong Kien</p>
             </div>
             <p class="about-text">
-              <strong>EngiLink Dictionary v3.5</strong><br>
+              <strong>EngiLink Dictionary v3.6.1</strong><br>
               A smart multilingual dictionary with AI-powered translation, OCR, reading mode, backup tools, and spaced repetition.<br>
               <span class="text-muted">Dictionary API: dictionaryapi.dev &nbsp;|&nbsp; SRS: SM-2 Algorithm</span>
             </p>

@@ -71,7 +71,10 @@
   let readingSelection = { word: '', sentence: '', paragraph: '' };
   let lastLookupRequestId = 0;
   let lookupAudio = { word: '', url: '' };
+  let runtimeSettings = { pronunciationAccent: 'en-US', theme: 'light' };
   const lookupAudioPlayer = new Audio();
+
+  refreshRuntimeSettings();
 
   // ── Listen for lookup from main process ──
   window.eld.onThemePreview((theme) => {
@@ -79,7 +82,8 @@
   });
 
   if (window.eld.onReadingOpen) {
-    window.eld.onReadingOpen((text) => {
+    window.eld.onReadingOpen(async (text) => {
+      await refreshRuntimeSettings();
       resetUI();
       currentLookupSource = 'reading';
       openReadingMode(text || '', true);
@@ -89,8 +93,8 @@
   window.eld.onLookupStart(async (word) => {
     // Apply theme
     try {
-      const s = await window.eld.getSettings();
-      document.body.setAttribute('data-theme', s.theme || 'light');
+      await refreshRuntimeSettings();
+      document.body.setAttribute('data-theme', runtimeSettings.theme || 'light');
     } catch (_) { /* ignore */ }
 
     resetUI();
@@ -508,19 +512,18 @@
     if (btnAudio.dataset.hasDictAudio === 'true' && audioPlayer.src) {
       // Play dictionary audio file
       audioPlayer.currentTime = 0;
-      audioPlayer.play();
       btnAudio.classList.add('playing');
       audioPlayer.onended = () => btnAudio.classList.remove('playing');
+      audioPlayer.onerror = () => {
+        btnAudio.classList.remove('playing');
+        playOverlayTTS(word);
+      };
+      audioPlayer.play().catch(() => {
+        btnAudio.classList.remove('playing');
+        playOverlayTTS(word);
+      });
     } else if (word && word !== '—') {
-      // Fallback: Web Speech API TTS
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(word);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.9;
-      btnAudio.classList.add('playing');
-      utterance.onend = () => btnAudio.classList.remove('playing');
-      utterance.onerror = () => btnAudio.classList.remove('playing');
-      window.speechSynthesis.speak(utterance);
+      playOverlayTTS(word);
     }
   });
 
@@ -987,11 +990,54 @@
     if (!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(word);
-    utterance.lang = 'en-US';
+    applyPronunciationVoice(utterance);
     utterance.rate = 0.9;
     btnAudioLookup.classList.add('playing');
     utterance.onend = () => btnAudioLookup.classList.remove('playing');
     utterance.onerror = () => btnAudioLookup.classList.remove('playing');
     window.speechSynthesis.speak(utterance);
+  }
+
+  async function refreshRuntimeSettings() {
+    try {
+      runtimeSettings = { ...runtimeSettings, ...(await window.eld.getSettings()) };
+    } catch (_) { /* keep defaults */ }
+    return runtimeSettings;
+  }
+
+  function playOverlayTTS(word) {
+    if (!word || word === '—' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(word);
+    applyPronunciationVoice(utterance);
+    utterance.rate = 0.9;
+    btnAudio.classList.add('playing');
+    utterance.onend = () => btnAudio.classList.remove('playing');
+    utterance.onerror = () => btnAudio.classList.remove('playing');
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function applyPronunciationVoice(utterance) {
+    const accent = runtimeSettings.pronunciationAccent || 'en-US';
+    utterance.lang = accent;
+    const voice = pickPronunciationVoice(accent);
+    if (voice) utterance.voice = voice;
+  }
+
+  function pickPronunciationVoice(accent) {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices();
+    const preferredLang = accent === 'en-GB' ? 'en-GB' : 'en-US';
+    const preferredNames = preferredLang === 'en-GB'
+      ? /(uk|gb|british|england|united kingdom|daniel|sonia|george|libby|google uk)/i
+      : /(us|american|united states|aria|guy|jenny|zira|david|mark|samantha|alex|google us)/i;
+    return voices.find((v) => v.lang === preferredLang && preferredNames.test(v.name))
+      || voices.find((v) => v.lang === preferredLang)
+      || voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('en-'))
+      || null;
+  }
+
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
   }
 })();
