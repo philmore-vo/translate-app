@@ -32,6 +32,7 @@ const DEFAULT_DATA = {
       lookup: 'CommandOrControl+Shift+Z',
       spotlight: 'CommandOrControl+Shift+Space',
       ocr: 'CommandOrControl+Shift+X',
+      regionTranslate: 'CommandOrControl+Shift+T',
     },
     overlayWidth: 380,
     overlayMaxHeight: 520,
@@ -1228,7 +1229,7 @@ Respond ONLY with valid JSON, no markdown:
     ];
 
     const parsed = parseAIResponse(
-      await requestChatCompletion(endpoint, apiKey, model, messages, 1000)
+      await requestChatCompletion(endpoint, apiKey, model, messages, 4000)
     );
 
     if (!parsed.success) { resolve(parsed); return; }
@@ -1237,6 +1238,33 @@ Respond ONLY with valid JSON, no markdown:
     resolve({ success: true, ...result });
   });
 }
+
+// ── Dedicated translate for Live Region — plain text, no JSON overhead ──
+// Handles long paragraphs more reliably than the JSON-format callAITranslate
+function callLiveRegionTranslate(text, apiKey, endpoint, model, targetLanguage) {
+  return new Promise(async (resolve) => {
+    const lang = targetLanguage || 'Vietnamese';
+    // Truncate input if ridiculously long (prevent token waste)
+    const safeText = text.length > 2000 ? text.slice(0, 2000).trim() + '…' : text;
+    const messages = [
+      {
+        role: 'system',
+        content: `You are a professional translator. Translate the given English text to ${lang} completely and accurately. Output ONLY the translation, nothing else. Do not add explanations, labels, or formatting.`,
+      },
+      { role: 'user', content: safeText },
+    ];
+
+    try {
+      const raw = await requestChatCompletion(endpoint, apiKey, model, messages, 6000);
+      if (!raw.success) { resolve({ success: false, error: raw.error }); return; }
+      const translation = raw.data.choices[0].message.content.trim();
+      resolve({ success: true, translation, translatedMeaning: translation });
+    } catch (err) {
+      resolve({ success: false, error: err.message });
+    }
+  });
+}
+
 
 // High-level: batch enrich multiple words extracted from a paragraph
 function callAIBatchEnrich(words, sentenceContext, apiKey, endpoint, model, targetLanguage) {
@@ -2307,6 +2335,16 @@ ipcMain.on('spotlight:hide', () => {
    ══════════════════════════════════════════════ */
 
 let snipWindow = null;
+let translatePopupWindow = null;
+let liveRegionWindow = null;
+let liveRegionIndicatorWindow = null;
+let liveRegionPollingTimer = null;
+let liveRegionResizeTimer = null;
+let liveRegionResizeState = null;  // { startCursor, startRect, dir }
+let liveRegionRect = null;
+let liveRegionLastText = '';
+let liveRegionActive = false;
+let liveRegionPolling = false;
 
 const OCR_LANGUAGES = {
   eng: 'English',
@@ -2413,7 +2451,7 @@ function saveOcrTextToLibrary(text) {
   return { success: saveDatabase(db), word };
 }
 
-function createSnipWindow() {
+function createSnipWindow(opts = {}) {
   if (snipWindow && !snipWindow.isDestroyed()) {
     snipWindow.close();
     snipWindow = null;
@@ -2422,6 +2460,8 @@ function createSnipWindow() {
   const cursor = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursor);
   const { x, y, width, height } = display.bounds;
+
+  const queryStr = opts.mode ? `?mode=${opts.mode}` : '';
 
   snipWindow = new BrowserWindow({
     x, y, width, height,
@@ -2441,7 +2481,7 @@ function createSnipWindow() {
     },
   });
 
-  snipWindow.loadFile('snip.html');
+  snipWindow.loadFile('snip.html', { query: queryStr ? { mode: opts.mode } : {} });
   snipWindow.once('ready-to-show', () => {
     snipWindow.show();
     snipWindow.focus();
@@ -2453,6 +2493,286 @@ function createSnipWindow() {
 function startOCRCapture() {
   createSnipWindow();
 }
+
+function startRegionTranslateCapture() {
+  createSnipWindow({ mode: 'translate' });
+}
+
+function startLiveRegionCapture() {
+  if (liveRegionActive) {
+    stopLiveRegion();
+    return;
+  }
+  createSnipWindow({ mode: 'liveRegion' });
+}
+
+function stopLiveRegion() {
+  liveRegionActive = false;
+  if (liveRegionPollingTimer) { clearInterval(liveRegionPollingTimer); liveRegionPollingTimer = null; }
+  if (liveRegionResizeTimer)  { clearInterval(liveRegionResizeTimer);  liveRegionResizeTimer  = null; }
+  liveRegionRect = null;
+  liveRegionLastText = '';
+  liveRegionPolling = false;
+  liveRegionResizeState = null;
+  if (liveRegionWindow    && !liveRegionWindow.isDestroyed())    liveRegionWindow.close();
+  if (liveRegionIndicatorWindow && !liveRegionIndicatorWindow.isDestroyed()) liveRegionIndicatorWindow.close();
+  liveRegionWindow = null;
+  liveRegionIndicatorWindow = null;
+  console.log('📡 Live region stopped');
+}
+
+function calcOverlayPos(rect) {
+  const display  = screen.getDisplayNearestPoint({ x: rect.x, y: rect.y });
+  const workArea = display.workArea;
+  const ow = Math.max(rect.width, 440);
+  let ox = rect.x;
+  let oy = rect.y + rect.height + 4;
+  if (ox + ow > workArea.x + workArea.width)  ox = workArea.x + workArea.width - ow - 4;
+  if (ox < workArea.x) ox = workArea.x;
+  if (oy + 200 > workArea.y + workArea.height) oy = rect.y - 200 - 4;
+  if (oy < workArea.y) oy = workArea.y;
+  return { ox: Math.round(ox), oy: Math.round(oy), ow: Math.round(ow) };
+}
+
+function createLiveRegionWindow(rect) {
+  if (liveRegionWindow && !liveRegionWindow.isDestroyed()) { liveRegionWindow.close(); liveRegionWindow = null; }
+
+  const { ox, oy, ow } = calcOverlayPos(rect);
+
+  liveRegionWindow = new BrowserWindow({
+    x: ox, y: oy, width: ow, height: 110,
+    frame: false, transparent: true, alwaysOnTop: true,
+    skipTaskbar: true, resizable: false, movable: false,
+    focusable: false, show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-live-region.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+    },
+  });
+
+  liveRegionWindow.loadFile('live-region.html');
+  liveRegionWindow.once('ready-to-show', () => {
+    liveRegionWindow.show();
+    // Start transparent-to-clicks but forward mousemove to renderer
+    liveRegionWindow.setIgnoreMouseEvents(true, { forward: true });
+    console.log('📡 Live region overlay shown at', ox, oy);
+  });
+  liveRegionWindow.on('closed', () => {
+    liveRegionWindow = null;
+    if (liveRegionActive) stopLiveRegion();
+  });
+}
+
+function createRegionIndicatorWindow(rect) {
+  if (liveRegionIndicatorWindow && !liveRegionIndicatorWindow.isDestroyed()) {
+    liveRegionIndicatorWindow.close(); liveRegionIndicatorWindow = null;
+  }
+
+  liveRegionIndicatorWindow = new BrowserWindow({
+    x: Math.round(rect.x), y: Math.round(rect.y),
+    width: Math.round(rect.width), height: Math.round(rect.height),
+    frame: false, transparent: true, alwaysOnTop: true,
+    skipTaskbar: true, resizable: false, movable: false,
+    focusable: false, show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-region-indicator.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+    },
+  });
+
+  liveRegionIndicatorWindow.loadFile('region-indicator.html');
+  liveRegionIndicatorWindow.once('ready-to-show', () => {
+    liveRegionIndicatorWindow.show();
+    liveRegionIndicatorWindow.setIgnoreMouseEvents(true, { forward: true });
+  });
+  liveRegionIndicatorWindow.on('closed', () => { liveRegionIndicatorWindow = null; });
+}
+
+async function pollLiveRegion(opts = {}) {
+  const { force = false } = opts;
+  if (!liveRegionActive || !liveRegionRect) return;
+  if (liveRegionPolling && !force) return;
+  liveRegionPolling = true;
+
+  try {
+    const rect = liveRegionRect;
+    const display = screen.getDisplayNearestPoint({ x: rect.x, y: rect.y });
+    const scaleFactor = display.scaleFactor || 1;
+
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: {
+        width:  Math.round(display.bounds.width  * scaleFactor),
+        height: Math.round(display.bounds.height * scaleFactor),
+      },
+    });
+
+    const source = sources.find(s => s.display_id && s.display_id === String(display.id)) || sources[0];
+    if (!source) { liveRegionPolling = false; return; }
+
+    const cropped = source.thumbnail.crop({
+      x:      Math.round((rect.x - display.bounds.x) * scaleFactor),
+      y:      Math.round((rect.y - display.bounds.y) * scaleFactor),
+      width:  Math.max(1, Math.round(rect.width  * scaleFactor)),
+      height: Math.max(1, Math.round(rect.height * scaleFactor)),
+    });
+
+    const Tesseract = require('tesseract.js');
+    const ocrLang = getOcrLanguageCode();
+    const bundledLangPath = getOcrLangPath();
+    const { corePath, workerPath } = getTesseractPaths();
+
+    const { data: { text } } = await Tesseract.recognize(cropped.toPNG(), ocrLang, {
+      langPath: bundledLangPath, corePath, workerPath,
+      gzip: false, cachePath: app.getPath('userData'),
+    });
+
+    const cleaned = text.trim().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+    if (!cleaned || cleaned.length < 3) {
+      if (liveRegionWindow && !liveRegionWindow.isDestroyed())
+        liveRegionWindow.webContents.send('liveRegion:status', 'notext');
+      liveRegionPolling = false;
+      return;
+    }
+
+    if (!force && cleaned === liveRegionLastText) { liveRegionPolling = false; return; }
+    liveRegionLastText = cleaned;
+
+    if (liveRegionWindow && !liveRegionWindow.isDestroyed())
+      liveRegionWindow.webContents.send('liveRegion:result', { loading: true, originalText: cleaned });
+
+    const db = loadDatabase();
+    const settings = db.settings;
+    const translateResult = settings.apiKey
+      ? await callLiveRegionTranslate(cleaned, settings.apiKey, settings.apiEndpoint, settings.model, settings.targetLanguage)
+      : { success: false, error: 'No API key — open Dashboard → Settings' };
+
+    const allWords = new Set(db.words.map(w => w.word.toLowerCase()));
+    const { words: vocabWords } = extractVocabulary(cleaned);
+    const newWords = vocabWords.filter(w => !allWords.has(w.toLowerCase())).slice(0, 8);
+
+    if (liveRegionWindow && !liveRegionWindow.isDestroyed()) {
+      liveRegionWindow.webContents.send('liveRegion:result', {
+        success: translateResult.success,
+        originalText: cleaned,
+        translation: translateResult.translation || translateResult.translatedMeaning || '',
+        error: translateResult.success ? null : (translateResult.error || 'Translation failed'),
+        newWords,
+      });
+    }
+    console.log('📡 Translated:', cleaned.slice(0, 60));
+  } catch (err) {
+    console.error('📡 pollLiveRegion error:', err.message);
+    if (liveRegionWindow && !liveRegionWindow.isDestroyed())
+      liveRegionWindow.webContents.send('liveRegion:status', 'error');
+  } finally {
+    liveRegionPolling = false;
+  }
+}
+
+function applyResizeDir(startRect, dir, dx, dy) {
+  let { x, y, width, height } = startRect;
+  if (dir.includes('n')) { y += dy; height -= dy; }
+  if (dir.includes('s')) { height += dy; }
+  if (dir.includes('w')) { x += dx; width -= dx; }
+  if (dir.includes('e')) { width += dx; }
+  width  = Math.max(80,  width);
+  height = Math.max(40, height);
+  return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
+}
+
+/* ══════════════════════════════════════════════
+   LIVE REGION IPC HANDLERS
+   ══════════════════════════════════════════════ */
+
+ipcMain.on('ocr:startLiveRegion', (event, rect) => {
+  if (snipWindow && !snipWindow.isDestroyed()) snipWindow.close();
+  liveRegionRect = rect;
+  liveRegionActive = true;
+  liveRegionLastText = '';
+  liveRegionPolling = false;
+
+  createLiveRegionWindow(rect);
+  createRegionIndicatorWindow(rect);
+
+  const db = loadDatabase();
+  const intervalMs = Math.max(1000, Math.min(10000, (db.settings.scanInterval || 2) * 1000));
+  setTimeout(() => pollLiveRegion({ force: true }), 800);
+  liveRegionPollingTimer = setInterval(() => pollLiveRegion(), intervalMs);
+  console.log('📡 Live region started, interval', intervalMs, 'ms');
+});
+
+ipcMain.on('liveRegion:stop', () => stopLiveRegion());
+
+ipcMain.on('liveRegion:translateNow', async () => {
+  if (!liveRegionActive) return;
+  await pollLiveRegion({ force: true });
+});
+
+// Overlay mouse toggle (ignoreMouseEvents pattern)
+ipcMain.on('liveRegion:mouseEnter', () => {
+  if (liveRegionWindow && !liveRegionWindow.isDestroyed())
+    liveRegionWindow.setIgnoreMouseEvents(false);
+});
+ipcMain.on('liveRegion:mouseLeave', () => {
+  if (liveRegionWindow && !liveRegionWindow.isDestroyed())
+    liveRegionWindow.setIgnoreMouseEvents(true, { forward: true });
+});
+
+// Indicator mouse toggle
+ipcMain.on('liveRegion:indicatorMouseEnter', () => {
+  if (liveRegionIndicatorWindow && !liveRegionIndicatorWindow.isDestroyed())
+    liveRegionIndicatorWindow.setIgnoreMouseEvents(false);
+});
+ipcMain.on('liveRegion:indicatorMouseLeave', () => {
+  if (liveRegionIndicatorWindow && !liveRegionIndicatorWindow.isDestroyed())
+    liveRegionIndicatorWindow.setIgnoreMouseEvents(true, { forward: true });
+});
+
+// Dynamic overlay height from renderer
+ipcMain.on('liveRegion:resizeHeight', (_, h) => {
+  if (liveRegionWindow && !liveRegionWindow.isDestroyed()) {
+    const [w] = liveRegionWindow.getSize();
+    liveRegionWindow.setSize(w, Math.min(Math.max(80, h), 400));
+  }
+});
+
+// Resize: start polling cursor every 16ms to update both windows
+ipcMain.on('liveRegion:startResize', (_, dir) => {
+  if (!liveRegionRect) return;
+  const cursor = screen.getCursorScreenPoint();
+  liveRegionResizeState = { startCursor: cursor, startRect: { ...liveRegionRect }, dir };
+
+  liveRegionResizeTimer = setInterval(() => {
+    if (!liveRegionResizeState || !liveRegionActive) return;
+    const cur = screen.getCursorScreenPoint();
+    const dx = cur.x - liveRegionResizeState.startCursor.x;
+    const dy = cur.y - liveRegionResizeState.startCursor.y;
+    const newRect = applyResizeDir(liveRegionResizeState.startRect, liveRegionResizeState.dir, dx, dy);
+
+    // Update indicator window bounds
+    if (liveRegionIndicatorWindow && !liveRegionIndicatorWindow.isDestroyed()) {
+      liveRegionIndicatorWindow.setBounds(newRect);
+    }
+    // Reposition overlay below indicator
+    if (liveRegionWindow && !liveRegionWindow.isDestroyed()) {
+      const { ox, oy, ow } = calcOverlayPos(newRect);
+      const [, oh] = liveRegionWindow.getSize();
+      liveRegionWindow.setBounds({ x: ox, y: oy, width: ow, height: oh });
+    }
+    // Update tracked rect (but don't trigger poll during drag)
+    liveRegionRect = newRect;
+  }, 16);
+});
+
+ipcMain.on('liveRegion:stopResize', () => {
+  if (liveRegionResizeTimer) { clearInterval(liveRegionResizeTimer); liveRegionResizeTimer = null; }
+  liveRegionResizeState = null;
+  // Force re-translate after resize
+  liveRegionLastText = '';
+  pollLiveRegion({ force: true });
+});
 
 // OCR IPC: region selected
 ipcMain.on('ocr:captureRegion', async (event, rect) => {
@@ -2595,6 +2915,288 @@ ipcMain.on('ocr:cancel', () => {
 });
 
 /* ══════════════════════════════════════════════
+   TRANSLATE POPUP WINDOW
+   ══════════════════════════════════════════════ */
+
+function createTranslatePopupWindow(x, y) {
+  // ── If popup already open, just reposition it (optional) and return it ──
+  if (translatePopupWindow && !translatePopupWindow.isDestroyed()) {
+    // Optionally nudge position toward new selection
+    const currentBounds = translatePopupWindow.getBounds();
+    const display = screen.getDisplayNearestPoint({ x, y });
+    const bounds = display.workArea;
+    const popupWidth = currentBounds.width;
+    const popupHeight = currentBounds.height;
+    let px = Math.round(x);
+    let py = Math.round(y);
+    if (px + popupWidth > bounds.x + bounds.width) px = bounds.x + bounds.width - popupWidth - 8;
+    if (py + popupHeight > bounds.y + bounds.height) py = Math.round(y) - popupHeight - 8;
+    if (px < bounds.x) px = bounds.x + 8;
+    if (py < bounds.y) py = bounds.y + 8;
+    translatePopupWindow.setPosition(px, py);
+    // Send a loading signal so the popup shows "Translating..." immediately
+    translatePopupWindow.webContents.send('translate:result', { loading: true, originalText: '...' });
+    if (!translatePopupWindow.isVisible()) {
+      translatePopupWindow.show();
+      translatePopupWindow.focus();
+    }
+    return translatePopupWindow;
+  }
+
+  const display = screen.getDisplayNearestPoint({ x, y });
+  const bounds = display.workArea;
+
+  const popupWidth = Math.min(520, bounds.width - 48);
+  const popupHeight = 280;
+
+  let px = Math.round(x);
+  let py = Math.round(y);
+  if (px + popupWidth > bounds.x + bounds.width) px = bounds.x + bounds.width - popupWidth - 8;
+  if (py + popupHeight > bounds.y + bounds.height) py = Math.round(y) - popupHeight - 8;
+  if (px < bounds.x) px = bounds.x + 8;
+  if (py < bounds.y) py = bounds.y + 8;
+
+  translatePopupWindow = new BrowserWindow({
+    x: px,
+    y: py,
+    width: popupWidth,
+    height: popupHeight,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-translate-popup.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  translatePopupWindow.loadFile('translate-popup.html');
+
+  translatePopupWindow.once('ready-to-show', () => {
+    translatePopupWindow.show();
+    // Don't focus so user can continue working in other apps
+  });
+
+  translatePopupWindow.on('closed', () => {
+    translatePopupWindow = null;
+  });
+
+  // NO blur auto-close — popup stays until user clicks X or presses Esc
+
+  return translatePopupWindow;
+}
+
+// OCR + AI translate for region capture
+ipcMain.on('ocr:captureRegionTranslate', async (event, rect) => {
+  try {
+    const display = screen.getDisplayNearestPoint({ x: rect.x, y: rect.y });
+    const scaleFactor = display.scaleFactor || 1;
+    const activeSnipWindow = snipWindow && !snipWindow.isDestroyed() ? snipWindow : null;
+
+    // Hide snip window for clean screenshot
+    if (activeSnipWindow) {
+      activeSnipWindow.hide();
+      await new Promise(resolve => setTimeout(resolve, 120));
+    }
+
+    // Capture screen
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: {
+        width: Math.round(display.bounds.width * scaleFactor),
+        height: Math.round(display.bounds.height * scaleFactor),
+      },
+    });
+
+    const source = sources.find(s => s.display_id && s.display_id === String(display.id)) || sources[0];
+    if (!source) {
+      if (activeSnipWindow && !activeSnipWindow.isDestroyed()) activeSnipWindow.close();
+      return;
+    }
+
+    // Crop to selected region
+    const fullImage = source.thumbnail;
+    const cropped = fullImage.crop({
+      x: Math.round((rect.x - display.bounds.x) * scaleFactor),
+      y: Math.round((rect.y - display.bounds.y) * scaleFactor),
+      width: Math.round(rect.width * scaleFactor),
+      height: Math.round(rect.height * scaleFactor),
+    });
+
+    // Close snip window — popup will show instead
+    if (activeSnipWindow && !activeSnipWindow.isDestroyed()) activeSnipWindow.close();
+
+    // Open translate popup immediately (shows loading state)
+    const popupX = rect.x;
+    const popupY = rect.y + rect.height + 14;
+    const popup = createTranslatePopupWindow(popupX, popupY);
+
+    // Run OCR
+    const Tesseract = require('tesseract.js');
+    const buffer = cropped.toPNG();
+    const ocrLang = getOcrLanguageCode();
+    const bundledLangPath = getOcrLangPath();
+    const trainedDataPath = path.join(bundledLangPath, `${ocrLang}.traineddata`);
+
+    if (!fs.existsSync(trainedDataPath)) {
+      if (popup && !popup.isDestroyed()) {
+        popup.webContents.send('translate:result', {
+          success: false, error: `OCR language data not found: ${ocrLang}.traineddata`,
+        });
+      }
+      return;
+    }
+
+    const { corePath, workerPath } = getTesseractPaths();
+    const ocrOptions = {
+      langPath: bundledLangPath, corePath, workerPath, gzip: false,
+      cachePath: app.getPath('userData'),
+      logger: (m) => { if (m.status === 'recognizing text') console.log(`🔎 OCR: ${Math.round((m.progress || 0) * 100)}%`); },
+    };
+
+    console.log(`🌐 Region translate OCR on ${rect.width}x${rect.height} area...`);
+    const { data: { text } } = await Tesseract.recognize(buffer, ocrLang, ocrOptions);
+    const cleaned = cleanupOcrPreviewText(text);
+    console.log('🌐 OCR text:', cleaned.slice(0, 100));
+
+    if (!cleaned || cleaned.length === 0) {
+      if (popup && !popup.isDestroyed()) {
+        popup.webContents.send('translate:result', {
+          success: false, error: 'No text found in selected area. Try a larger region.',
+          originalText: '',
+        });
+      }
+      return;
+    }
+
+    // Send OCR text immediately so popup can show it
+    if (popup && !popup.isDestroyed()) {
+      popup.webContents.send('translate:result', { loading: true, originalText: cleaned });
+    }
+
+    // Run AI translation
+    const db = loadDatabase();
+    const settings = db.settings;
+    let translateResult;
+    if (settings.apiKey) {
+      translateResult = await callAITranslate(cleaned, settings.apiKey, settings.apiEndpoint, settings.model, settings.targetLanguage);
+    } else {
+      translateResult = { success: false, error: 'No API key — go to Dashboard → Settings' };
+    }
+
+    // Find new words not yet in library
+    const allWords = db.words.map(w => w.word.toLowerCase());
+    const { words: vocabWords } = extractVocabulary(cleaned);
+    const newWords = vocabWords.filter(w => !allWords.includes(w.toLowerCase()));
+
+    // Send final result to popup
+    if (popup && !popup.isDestroyed()) {
+      popup.webContents.send('translate:result', {
+        success: translateResult.success,
+        originalText: cleaned,
+        translation: translateResult.translation || translateResult.translatedMeaning || '',
+        error: translateResult.success ? null : (translateResult.error || 'Translation failed'),
+        newWords: newWords.slice(0, 10),
+      });
+    }
+
+    // Resize popup height based on content
+    if (popup && !popup.isDestroyed()) {
+      const hasWords = newWords.length > 0;
+      const newHeight = hasWords ? 340 : 240;
+      popup.setSize(popup.getSize()[0], newHeight);
+    }
+
+  } catch (err) {
+    console.error('❌ Region translate error:', err.message);
+    if (translatePopupWindow && !translatePopupWindow.isDestroyed()) {
+      translatePopupWindow.webContents.send('translate:result', {
+        success: false, error: 'Error: ' + err.message,
+      });
+    }
+  }
+});
+
+// Add a single word to library from translate popup
+ipcMain.handle('translatePopup:addWord', (event, word) => {
+  if (!word || typeof word !== 'string' || !word.trim()) return false;
+  const cleanWord = word.trim();
+  const db = loadDatabase();
+  const key = normalizeWordKey(cleanWord);
+  const existingIdx = db.words.findIndex(w => normalizeWordKey(w.word) === key);
+  const now = new Date().toISOString();
+
+  if (existingIdx >= 0) {
+    db.words[existingIdx].lookupCount = (db.words[existingIdx].lookupCount || 0) + 1;
+    db.words[existingIdx].lastLookup = now;
+  } else {
+    db.words.unshift({
+      id: crypto.randomUUID(), word: cleanWord, phonetic: '', audioUrl: '', meanings: [],
+      technicalNote: '', translatedMeaning: '', vietnameseMeaning: '',
+      topic: 'Subtitle', tags: [], relatedTerms: [], userNote: '',
+      isFavorite: false, lookupCount: 1, firstLookup: now, lastLookup: now,
+      isPhrase: cleanWord.split(/\s+/).length > 1,
+      easeFactor: 2.5, interval: 0, repetitions: 0, dueDate: null,
+      contexts: [], synonyms: [], antonyms: [], prepositions: [],
+      verbForms: null, exampleSentence: '', phraseType: '',
+      enrichmentStatus: 'pending', enrichmentVersion: 1,
+    });
+  }
+  return saveDatabase(db);
+});
+
+// Add multiple words to library at once
+ipcMain.handle('translatePopup:addAllWords', (event, words) => {
+  if (!Array.isArray(words) || words.length === 0) return false;
+  const db = loadDatabase();
+  const now = new Date().toISOString();
+  let changed = false;
+
+  for (const word of words) {
+    if (!word || typeof word !== 'string' || !word.trim()) continue;
+    const cleanWord = word.trim();
+    const key = normalizeWordKey(cleanWord);
+    const existingIdx = db.words.findIndex(w => normalizeWordKey(w.word) === key);
+
+    if (existingIdx >= 0) {
+      db.words[existingIdx].lookupCount = (db.words[existingIdx].lookupCount || 0) + 1;
+      db.words[existingIdx].lastLookup = now;
+      changed = true;
+    } else {
+      db.words.unshift({
+        id: crypto.randomUUID(), word: cleanWord, phonetic: '', audioUrl: '', meanings: [],
+        technicalNote: '', translatedMeaning: '', vietnameseMeaning: '',
+        topic: 'Subtitle', tags: [], relatedTerms: [], userNote: '',
+        isFavorite: false, lookupCount: 1, firstLookup: now, lastLookup: now,
+        isPhrase: cleanWord.split(/\s+/).length > 1,
+        easeFactor: 2.5, interval: 0, repetitions: 0, dueDate: null,
+        contexts: [], synonyms: [], antonyms: [], prepositions: [],
+        verbForms: null, exampleSentence: '', phraseType: '',
+        enrichmentStatus: 'pending', enrichmentVersion: 1,
+      });
+      changed = true;
+    }
+  }
+
+  return changed ? saveDatabase(db) : false;
+});
+
+ipcMain.on('translatePopup:close', () => {
+  if (translatePopupWindow && !translatePopupWindow.isDestroyed()) translatePopupWindow.close();
+});
+
+ipcMain.on('translatePopup:lookupWord', (event, word) => {
+  if (translatePopupWindow && !translatePopupWindow.isDestroyed()) translatePopupWindow.close();
+  if (word && word.trim()) showOverlay(word.trim());
+});
+
+/* ══════════════════════════════════════════════
    GLOBAL HOTKEYS (Transactional)
    ══════════════════════════════════════════════ */
 
@@ -2635,6 +3237,9 @@ const hotkeyHandlers = {
   },
   ocr: () => {
     startOCRCapture();
+  },
+  regionTranslate: () => {
+    startLiveRegionCapture();
   },
 };
 

@@ -5,6 +5,11 @@
 (function () {
   'use strict';
 
+  // ── Detect mode from URL query string ──
+  const urlParams = new URLSearchParams(window.location.search);
+  const TRANSLATE_MODE = urlParams.get('mode') === 'translate';
+  const LIVE_REGION_MODE = urlParams.get('mode') === 'liveRegion';
+
   const overlay = document.getElementById('snip-overlay');
   const selection = document.getElementById('snip-selection');
   const hint = document.getElementById('snip-hint');
@@ -17,10 +22,31 @@
   const translateText = document.getElementById('snip-translate-text');
   const saveText = document.getElementById('snip-save-text');
 
+  // Adapt hint text for translate mode
+  if (TRANSLATE_MODE && hint) {
+    hint.innerHTML = '🌐 Drag to select subtitle area — Press <kbd>Esc</kbd> to cancel';
+  }
+
+  // Adapt hint text for live region mode
+  if (LIVE_REGION_MODE && hint) {
+    hint.innerHTML = '📡 Drag to select the region to monitor continuously — Press <kbd>Esc</kbd> to cancel';
+  }
+
+  // Adapt processing label for translate mode
+  if (TRANSLATE_MODE && processing) {
+    processing.innerHTML = '<span class="spinner"></span> Translating...';
+  }
+
+  // Adapt processing label for live region mode
+  if (LIVE_REGION_MODE && processing) {
+    processing.innerHTML = '<span class="spinner"></span> Starting live monitor...';
+  }
+
   let startX = 0;
   let startY = 0;
   let dragging = false;
   let phase = 'select';
+  let capturedRect = null;
 
   document.addEventListener('mousedown', (e) => {
     if (phase !== 'select') return;
@@ -71,11 +97,19 @@
       return;
     }
 
+    capturedRect = rect;
     phase = 'processing';
     selection.style.display = 'none';
     overlay.style.background = 'rgba(0,0,0,0.5)';
     processing.style.display = 'block';
-    window.eld.captureRegion(rect);
+
+    if (LIVE_REGION_MODE) {
+      window.eld.startLiveRegion(rect);
+    } else if (TRANSLATE_MODE) {
+      window.eld.captureRegionTranslate(rect);
+    } else {
+      window.eld.captureRegion(rect);
+    }
   });
 
   function submitPreview(mode) {
@@ -100,14 +134,14 @@
     }, 50);
   }
 
-  if (window.eld.onPreview) {
+  if (!TRANSLATE_MODE && window.eld.onPreview) {
     window.eld.onPreview(showPreview);
   }
 
-  closePreview.addEventListener('click', () => window.eld.cancelSnip());
-  lookupWord.addEventListener('click', () => submitPreview('lookup'));
-  translateText.addEventListener('click', () => submitPreview('translate'));
-  saveText.addEventListener('click', () => submitPreview('save'));
+  if (closePreview) closePreview.addEventListener('click', () => window.eld.cancelSnip());
+  if (lookupWord) lookupWord.addEventListener('click', () => submitPreview('lookup'));
+  if (translateText) translateText.addEventListener('click', () => submitPreview('translate'));
+  if (saveText) saveText.addEventListener('click', () => submitPreview('save'));
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

@@ -397,11 +397,31 @@
     currentFullText = null;
     document.getElementById('overlay-root').scrollTop = 0;
 
+    // Cancel any in-progress or queued TTS from the previous word
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    // Stop any playing audio (dictionary audio or lookup audio)
+    try {
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      audioPlayer.onended = null;
+      audioPlayer.onerror = null;
+    } catch (_) { /* ignore */ }
+    try {
+      lookupAudioPlayer.pause();
+      lookupAudioPlayer.currentTime = 0;
+      lookupAudioPlayer.onended = null;
+      lookupAudioPlayer.onerror = null;
+    } catch (_) { /* ignore */ }
+
     wordText.textContent = '—';
     wordText.title = '';
     phoneticText.textContent = '';
     partOfSpeech.textContent = '';
     btnAudio.style.display = 'none';
+    btnAudio.classList.remove('playing');
     btnAudio.dataset.hasDictAudio = 'false';
     audioPlayer.src = '';
     btnFav.classList.remove('active');
@@ -527,11 +547,20 @@
     }
   });
 
+  // ── Stop all audio/TTS (used on close and before each new lookup) ──
+  function stopAllAudio() {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    try { audioPlayer.pause(); audioPlayer.currentTime = 0; } catch (_) { /* ignore */ }
+    try { lookupAudioPlayer.pause(); lookupAudioPlayer.currentTime = 0; } catch (_) { /* ignore */ }
+    btnAudio.classList.remove('playing');
+    if (btnAudioLookup) btnAudioLookup.classList.remove('playing');
+  }
+
   // ── Close ──
-  btnClose.addEventListener('click', () => window.eld.hideOverlay());
+  btnClose.addEventListener('click', () => { stopAllAudio(); window.eld.hideOverlay(); });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') window.eld.hideOverlay();
+    if (e.key === 'Escape') { stopAllAudio(); window.eld.hideOverlay(); }
   });
 
   // ── Refresh (force re-fetch from AI, bypass cache) ──

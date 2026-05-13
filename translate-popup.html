@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EngiLink — Live Translate</title>
+  <link rel="stylesheet" href="css/translate-popup.css">
+</head>
+<body>
+  <div class="tp-root" id="tp-root">
+    <!-- Header (draggable) -->
+    <div class="tp-header">
+      <div class="tp-badge">
+        <span class="icon">🌐</span>
+        <span>Live Translate</span>
+        <span class="tp-status-dot" id="tp-status-dot" title="Ready"></span>
+      </div>
+      <div class="tp-header-actions">
+        <span class="tp-hint-label">Drag header to move · Ctrl+Shift+T for new</span>
+        <button class="tp-close-btn" id="tp-close-btn" title="Close (Esc)">✕</button>
+      </div>
+    </div>
+
+    <!-- Original OCR text -->
+    <div class="tp-original" id="tp-original">
+      <div class="tp-label">Original</div>
+      <div class="tp-original-text" id="tp-original-text">Waiting for selection...</div>
+    </div>
+
+    <!-- Translation result -->
+    <div class="tp-translation">
+      <div class="tp-label">Translation</div>
+      <div class="tp-translation-text loading" id="tp-translation-text">
+        <span class="tp-spinner"></span> Press Ctrl+Shift+T and drag to select...
+      </div>
+    </div>
+
+    <!-- New words section (hidden until data arrives) -->
+    <div class="tp-words-section" id="tp-words-section" style="display:none;">
+      <div class="tp-words-header">
+        <span class="tp-words-label">💡 New words for Library</span>
+        <button class="tp-add-all-btn" id="tp-add-all-btn">Add All</button>
+      </div>
+      <div class="tp-words-list" id="tp-words-list"></div>
+    </div>
+
+    <!-- Footer hint -->
+    <div class="tp-footer">
+      <div class="tp-hint">Press <kbd>Esc</kbd> to close · Drag header to reposition</div>
+    </div>
+  </div>
+
+  <script src="js/translate-popup.js"></script>
+</body>
+</html>

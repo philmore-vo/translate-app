@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=flat&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/Electron-41.x-47848F?style=flat&logo=electron&logoColor=white" alt="Electron" />
-  <img src="https://img.shields.io/badge/Version-3.6.1-7c3aed?style=flat" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-3.6.2-7c3aed?style=flat" alt="Version" />
   <img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat" alt="License" />
 </p>
 
@@ -53,6 +53,7 @@
 | 🔤 **AI Translation** | Dịch từ/cụm từ/đoạn văn kèm giải thích, ví dụ, related words, tech note |
 | 🧩 **Smart Vocabulary Extraction** | Khi dịch đoạn, app tự tách từ bằng code, lọc stop words và chỉ lưu từng từ riêng lẻ vào Library |
 | 🧠 **Enhanced Word Data** | Mỗi từ có synonyms, antonyms, prepositions/phrasal verbs, V2/V3, example sentence và contexts |
+| 📡 **Live Region Translate** | Chọn vùng màn hình cố định → dịch liên tục như sub song ngữ. Có resize vùng chọn, nút ⚡ dịch ngay, auto-scroll theo nội dung |
 | ⌨️ **Hotkey Lookup** | `Ctrl + Shift + Z` để tra từ đang bôi đen ở bất kỳ app nào |
 | 🔍 **Spotlight Search** | `Ctrl + Shift + Space` để mở thanh tìm nhanh |
 | 📷 **OCR Capture** | `Ctrl + Shift + X` để quét chữ từ vùng màn hình |
@@ -250,7 +251,24 @@ Học lại từ theo thuật toán SM-2:
 5. Khi reveal, flashcard có thể hiện thêm V2/V3, prepositions, antonyms và example sentence
 6. Click related word khi đang học → overlay mở mà không làm mất tiến trình
 
-### 7. History & Statistics
+### 7. Live Region Translate (dịch vùng cố định, liên tục)
+
+Tính năng **"sub song ngữ"** — chọn một vùng màn hình cố định và app sẽ tự động quét + dịch liên tục:
+
+1. Bấm `Ctrl + Shift + T`
+2. Kéo chọn vùng muốn theo dõi (ví dụ: khung phụ đề video, đoạn văn trên PDF)
+3. **Viền vàng** xuất hiện quanh vùng chọn, **overlay dịch** hiện bên dưới
+4. App tự quét chữ và dịch mỗi **2 giây**, chỉ gọi AI khi nội dung thay đổi
+5. **Hover vào overlay** để hiện thanh điều khiển:
+   - ⚡ **Now** — dịch ngay lập tức, không cần đợi interval
+   - ■ **Stop** — dừng và đóng overlay
+   - Các word chip mới (từ chưa có trong Library) — bấm **+** để lưu nhanh
+6. **Kéo 8 resize handles** (góc và cạnh của viền vàng) để thay đổi vùng quét
+7. Bấm `Ctrl + Shift + T` lần nữa hoặc **■ Stop** để dừng
+
+> 💡 Live Region dùng AI dịch plain-text với 6000 tokens — xử lý tốt đoạn văn dài. OCR chạy offline không tốn quota API.
+
+### 8. History & Statistics
 
 - **History:** timeline các lần tra gần đây, click word chip để mở lại overlay
 - **Statistics:** activity heatmap kiểu GitHub, hiển thị độ đều đặn học tập
@@ -264,7 +282,8 @@ Học lại từ theo thuật toán SM-2:
 | `Ctrl + Shift + Z` | Tra từ đang bôi đen (toàn hệ thống) |
 | `Ctrl + Shift + Space` | Mở Spotlight search |
 | `Ctrl + Shift + X` | OCR vùng màn hình |
-| `Esc` | Đóng overlay / popup |
+| `Ctrl + Shift + T` | Bật/tắt Live Region Translate (dịch vùng cố định) |
+| `Esc` | Đóng overlay / dừng Live Region |
 
 > 💡 Có thể đổi tất cả hotkey trong **Settings → Hotkeys** nếu trùng với app khác.
 
@@ -421,35 +440,54 @@ chi_sim.traineddata  # Tiếng Trung giản thể
 
 ```text
 translate-app/
-├── 📄 main.js                  ← Electron main process
-├── 📄 preload.js               ← IPC bridge cho overlay
-├── 📄 preload-dashboard.js     ← IPC bridge cho dashboard
-├── 📄 preload-spotlight.js     ← IPC bridge cho spotlight
-├── 📄 preload-snip.js          ← IPC bridge cho OCR snip
-├── 📄 dashboard.html           ← Giao diện chính (Library, Study, Settings…)
-├── 📄 overlay.html             ← Overlay tra từ
-├── 📄 spotlight.html           ← Spotlight search bar
-├── 📄 snip.html                ← OCR region selector
+├── 📄 main.js                     ← Electron main process
+├── 📄 preload.js                  ← IPC bridge cho overlay
+├── 📄 preload-dashboard.js        ← IPC bridge cho dashboard
+├── 📄 preload-spotlight.js        ← IPC bridge cho spotlight
+├── 📄 preload-snip.js             ← IPC bridge cho OCR snip
+├── 📄 preload-live-region.js      ← IPC bridge cho Live Region overlay
+├── 📄 preload-region-indicator.js ← IPC bridge cho region border + resize
+├── 📄 dashboard.html              ← Giao diện chính (Library, Study, Settings…)
+├── 📄 overlay.html                ← Overlay tra từ
+├── 📄 spotlight.html              ← Spotlight search bar
+├── 📄 snip.html                   ← OCR region selector
+├── 📄 live-region.html            ← Overlay dịch Live Region (transparent subtitle)
+├── 📄 region-indicator.html       ← Viền vùng chọn + resize handles
 ├── 📄 setup.bat / start-app.bat
-├── 📄 eng.traineddata          ← OCR English (offline)
-├── 📁 css/                     ← Stylesheets
-├── 📁 js/                      ← Renderer logic + tokenizer (dashboard.js, overlay.js, stop-words.js…)
-├── 📁 assets/                  ← Icon, tray icon, helpers
-├── 📁 scripts/                 ← electron-builder afterPack
-└── 📁 dist/                    ← Output sau khi build
+├── 📄 eng.traineddata             ← OCR English (offline)
+├── 📁 css/                        ← Stylesheets
+│   ├── live-region.css            ← Style overlay subtitle
+│   └── region-indicator.css       ← Style viền + resize handles
+├── 📁 js/                         ← Renderer logic
+│   ├── live-region.js             ← Renderer Live Region overlay
+│   ├── region-indicator.js        ← Renderer resize handles
+│   └── ... (dashboard.js, overlay.js, stop-words.js…)
+├── 📁 assets/                     ← Icon, tray icon, helpers
+├── 📁 scripts/                    ← electron-builder afterPack
+└── 📁 dist/                       ← Output sau khi build
 ```
 
 ---
 
 ## 📜 Lịch sử cập nhật
 
-### V3.6.1 (hiện tại)
+### V3.6.2 (hiện tại)
+
+- 📡 **Live Region Translate** — chọn vùng màn hình cố định để dịch liên tục như sub song ngữ (`Ctrl + Shift + T`)
+- 🖼️ **Region Indicator** — viền vàng nhạt hiển thị vùng đang quét, hỗ trợ 8 resize handles để thay đổi kích thước bằng cách kéo
+- ⚡ **Translate Now** — hover vào overlay dịch → bấm nút để bỏ qua interval, dịch ngay lập tức
+- 🔁 **Smart polling** — chỉ gọi AI khi nội dung OCR thay đổi, tiết kiệm quota API
+- 🔧 **callLiveRegionTranslate** — hàm dịch riêng với 6000 tokens và plain-text output, xử lý đoạn dài chính xác hơn
+- 🐛 Fix hover detection: dùng `mousemove + elementFromPoint` (Electron standard pattern cho `ignoreMouseEvents + forward:true`)
+- 🐛 Fix CSS: bỏ `line-clamp: 2` trên text gốc, overlay tự co giãn chiều cao theo nội dung
+
+### V3.6.1
 
 - 🧩 **Smart Vocabulary Extraction** — dịch câu/đoạn nhưng Library chỉ lưu từng từ vựng đã tách, không lưu nguyên phrase/paragraph
 - 🧠 **Enhanced Word Data** — thêm synonyms, antonyms, prepositions/phrasal verbs, V2/V3, example sentence và contexts
-- 🎯 Topic của từ phổ thông như `use`, `form`, `similar`, `different` được chuẩn hóa về **General** thay vì ăn theo topic của cả câu
+- 🎯 Topic của từ phổ thông như `use`, `form`, `similar`, `different` được chuẩn hóa về **General**
 - 📚 Library detail modal và Study flashcard hiển thị dữ liệu enrichment đầy đủ hơn
-- 📦 Schema migration lên V8 và cache AI được version hóa lại để tránh dùng response cũ thiếu dữ liệu
+- 📦 Schema migration lên V8 và cache AI được version hóa lại
 
 ### V3.5
 

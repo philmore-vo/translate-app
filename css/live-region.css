@@ -1,0 +1,296 @@
+/* ============================================
+   EngiLink — Live Region Overlay Styles
+   Transparent subtitle-style overlay
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  min-height: 100%;
+  overflow: visible;
+  background: transparent;
+  font-family: 'Inter', system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Root — full window, transparent bg ── */
+.lr-root {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  position: relative;
+}
+
+/* ══════════════════════════════
+   IDLE / STATUS BAR
+   ══════════════════════════════ */
+.lr-idle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px 5px;
+  background: rgba(10, 12, 24, 0.78);
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  min-height: 26px;
+  flex-shrink: 0;
+}
+
+/* Status dot */
+.lr-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.lr-dot.scanning {
+  background: #f59e0b;
+  animation: lrPulse 1s ease-in-out infinite alternate;
+}
+
+.lr-dot.ok {
+  background: #34d399;
+  animation: none;
+}
+
+.lr-dot.error {
+  background: #f87171;
+  animation: none;
+}
+
+@keyframes lrPulse {
+  from { opacity: 0.4; }
+  to   { opacity: 1; }
+}
+
+.lr-idle-text {
+  font-size: 10px;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+/* ══════════════════════════════
+   MAIN CONTENT AREA
+   ══════════════════════════════ */
+.lr-content {
+  background: rgba(8, 10, 20, 0.85);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  padding: 7px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  animation: lrFadeIn 0.25s ease both;
+}
+
+@keyframes lrFadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Original text — small, dimmed, italic */
+.lr-original {
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.38);
+  font-style: italic;
+  word-break: break-word;
+  overflow: hidden;
+  max-height: 3em;  /* ~2 lines visible by default */
+  transition: color 0.2s, max-height 0.3s ease;
+}
+
+/* Translation — prominent, bold, colored */
+.lr-translation {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #fde68a;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.7);
+  word-break: break-word;
+  transition: all 0.2s;
+}
+
+.lr-translation.loading {
+  color: rgba(255,255,255,0.35);
+  font-weight: 400;
+  font-size: 13px;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.lr-translation.error {
+  color: #f87171;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* Spinner */
+.lr-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.1);
+  border-top-color: #fbbf24;
+  border-radius: 50%;
+  animation: lrSpin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes lrSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ══════════════════════════════
+   CONTROLS BAR (hover reveal)
+   ══════════════════════════════ */
+.lr-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 6px;
+  background: rgba(6, 8, 18, 0.90);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-radius: 0 0 8px 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Show controls on hover — handled via JS class toggle */
+.lr-root.hovered .lr-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Buttons ── */
+.lr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.lr-btn:active { transform: scale(0.95); }
+.lr-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+/* ⚡ Translate Now — yellow accent */
+.lr-btn-now {
+  background: #fbbf24;
+  color: #1a1000;
+}
+
+.lr-btn-now:hover:not(:disabled) {
+  background: #fde68a;
+}
+
+/* ■ Stop — red accent */
+.lr-btn-stop {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+
+.lr-btn-stop:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+.lr-btn-icon { font-size: 10px; }
+.lr-btn-label { letter-spacing: 0.03em; }
+
+/* ── Word chips ── */
+.lr-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  flex: 1;
+}
+
+.lr-word-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.65);
+  cursor: default;
+  transition: border-color 0.2s, background 0.2s;
+  max-width: 110px;
+}
+
+.lr-word-chip.saved {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.08);
+  color: #6ee7b7;
+}
+
+.lr-word-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.lr-word-add {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 3px;
+  background: rgba(108, 130, 247, 0.22);
+  color: #a5b4fc;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  padding: 0;
+}
+
+.lr-word-add:hover { background: rgba(108, 130, 247, 0.45); }
+.lr-word-chip.saved .lr-word-add { display: none; }
+
+/* ══════════════════════════════
+   HOVER STATE — full reveal
+   ══════════════════════════════ */
+.lr-root.hovered .lr-original {
+  max-height: none;
+  color: rgba(255,255,255,0.55);
+}
+
+.lr-root.hovered .lr-translation {
+  color: #fef3c7;
+}

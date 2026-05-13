@@ -1125,11 +1125,12 @@
       const hkLookup = $('#setting-hotkey-lookup').value;
       const hkSpotlight = $('#setting-hotkey-spotlight').value;
       const hkOcr = $('#setting-hotkey-ocr').value;
+      const hkRegionTranslate = $('#setting-hotkey-region-translate').value;
       if (hkLookup && hkSpotlight && hkOcr) {
-        const hkResult = await window.eld.updateHotkeys({ lookup: hkLookup, spotlight: hkSpotlight, ocr: hkOcr });
+        const hkResult = await window.eld.updateHotkeys({ lookup: hkLookup, spotlight: hkSpotlight, ocr: hkOcr, regionTranslate: hkRegionTranslate || 'CommandOrControl+Shift+T' });
         const hkStatus = $('#hotkey-status');
         if (hkResult.success) {
-          newSettings.hotkeys = { lookup: hkLookup, spotlight: hkSpotlight, ocr: hkOcr };
+          newSettings.hotkeys = { lookup: hkLookup, spotlight: hkSpotlight, ocr: hkOcr, regionTranslate: hkRegionTranslate || 'CommandOrControl+Shift+T' };
           hkStatus.textContent = '✓ Hotkeys updated';
           hkStatus.style.color = 'var(--green)';
         } else {
@@ -1175,6 +1176,7 @@
     setupHotkeyRecorder('#setting-hotkey-lookup');
     setupHotkeyRecorder('#setting-hotkey-spotlight');
     setupHotkeyRecorder('#setting-hotkey-ocr');
+    setupHotkeyRecorder('#setting-hotkey-region-translate');
 
     // DB path
     window.eld.getDbPath().then((p) => {
@@ -1224,6 +1226,7 @@
       $('#setting-hotkey-lookup').value = settings.hotkeys.lookup || 'CommandOrControl+Shift+Z';
       $('#setting-hotkey-spotlight').value = settings.hotkeys.spotlight || 'CommandOrControl+Shift+Space';
       $('#setting-hotkey-ocr').value = settings.hotkeys.ocr || 'CommandOrControl+Shift+X';
+      $('#setting-hotkey-region-translate').value = settings.hotkeys.regionTranslate || 'CommandOrControl+Shift+T';
     }
     // Theme
     const themeToggle = $('#setting-theme-dark');

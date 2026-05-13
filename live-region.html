@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EngiLink — Live Region</title>
+  <link rel="stylesheet" href="css/live-region.css">
+</head>
+<body>
+  <div class="lr-root" id="lr-root">
+
+    <!-- ── Idle / scanning state ── -->
+    <div class="lr-idle" id="lr-idle">
+      <span class="lr-dot" id="lr-dot"></span>
+      <span class="lr-idle-text" id="lr-idle-text">Scanning…</span>
+    </div>
+
+    <!-- ── Result area ── -->
+    <div class="lr-content" id="lr-content" style="display:none;">
+      <div class="lr-original" id="lr-original"></div>
+      <div class="lr-translation" id="lr-translation"></div>
+    </div>
+
+    <!-- ── Hover controls (always rendered, visibility via CSS) ── -->
+    <div class="lr-controls" id="lr-controls">
+      <button class="lr-btn lr-btn-now" id="lr-btn-now" title="Translate now (bypass interval)">
+        <span class="lr-btn-icon">⚡</span>
+        <span class="lr-btn-label">Now</span>
+      </button>
+      <button class="lr-btn lr-btn-stop" id="lr-btn-stop" title="Stop monitoring (Esc)">
+        <span class="lr-btn-icon">■</span>
+        <span class="lr-btn-label">Stop</span>
+      </button>
+      <div class="lr-words" id="lr-words"></div>
+    </div>
+
+  </div>
+
+  <script src="js/live-region.js"></script>
+</body>
+</html>
