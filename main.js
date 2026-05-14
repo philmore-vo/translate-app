@@ -1244,18 +1244,21 @@ Respond ONLY with valid JSON, no markdown:
 function callLiveRegionTranslate(text, apiKey, endpoint, model, targetLanguage) {
   return new Promise(async (resolve) => {
     const lang = targetLanguage || 'Vietnamese';
-    // Truncate input if ridiculously long (prevent token waste)
-    const safeText = text.length > 2000 ? text.slice(0, 2000).trim() + '…' : text;
+    // Hard cap: 1000 chars is enough for a full paragraph translation
+    // (saves ~10x tokens vs the previous 6000 max_tokens with 2000 char input)
+    const safeText = text.length > 1000 ? text.slice(0, 1000).trim() + '…' : text;
     const messages = [
       {
         role: 'system',
-        content: `You are a professional translator. Translate the given English text to ${lang} completely and accurately. Output ONLY the translation, nothing else. Do not add explanations, labels, or formatting.`,
+        content: `You are a professional translator. Translate the given text to ${lang} completely and accurately. Output ONLY the translation, nothing else.`,
       },
       { role: 'user', content: safeText },
     ];
 
     try {
-      const raw = await requestChatCompletion(endpoint, apiKey, model, messages, 6000);
+      // 1500 tokens is sufficient for translating ~1000 chars of English text
+      // (Vietnamese/Japanese translations rarely exceed 1.5x source length)
+      const raw = await requestChatCompletion(endpoint, apiKey, model, messages, 1500);
       if (!raw.success) { resolve({ success: false, error: raw.error }); return; }
       const translation = raw.data.choices[0].message.content.trim();
       resolve({ success: true, translation, translatedMeaning: translation });
@@ -2340,11 +2343,37 @@ let liveRegionWindow = null;
 let liveRegionIndicatorWindow = null;
 let liveRegionPollingTimer = null;
 let liveRegionResizeTimer = null;
-let liveRegionResizeState = null;  // { startCursor, startRect, dir }
+let liveRegionResizeState = null;
 let liveRegionRect = null;
-let liveRegionLastText = '';
+let liveRegionLastNormText = '';   // normalized for stable comparison
 let liveRegionActive = false;
 let liveRegionPolling = false;
+// In-memory translation cache: normText → translation (max 50 entries)
+const liveRegionTranslateCache = new Map();
+const LIVE_REGION_CACHE_MAX = 50;
+
+// Normalize OCR text for comparison (strips punctuation, lowercases)
+// so minor OCR noise (e.g. 'l' vs '1', extra punctuation) doesn't trigger re-translate
+function normalizeOcrText(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')  // strip punctuation
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Jaccard similarity on word sets (ignores words < 3 chars)
+// Returns 0.0–1.0. ≥0.80 = same content, OCR just noisy
+function ocrWordSimilarity(a, b) {
+  const wordsOf = s => new Set(s.split(' ').filter(w => w.length > 2));
+  const wa = wordsOf(a);
+  const wb = wordsOf(b);
+  if (wa.size === 0 && wb.size === 0) return 1;
+  if (wa.size === 0 || wb.size === 0) return 0;
+  let common = 0;
+  for (const w of wa) if (wb.has(w)) common++;
+  return common / (wa.size + wb.size - common);  // Jaccard index
+}
 
 const OCR_LANGUAGES = {
   eng: 'English',
@@ -2511,9 +2540,11 @@ function stopLiveRegion() {
   if (liveRegionPollingTimer) { clearInterval(liveRegionPollingTimer); liveRegionPollingTimer = null; }
   if (liveRegionResizeTimer)  { clearInterval(liveRegionResizeTimer);  liveRegionResizeTimer  = null; }
   liveRegionRect = null;
-  liveRegionLastText = '';
+  liveRegionLastNormText = '';
   liveRegionPolling = false;
   liveRegionResizeState = null;
+  // Clear cache when stopping (fresh start next session)
+  liveRegionTranslateCache.clear();
   if (liveRegionWindow    && !liveRegionWindow.isDestroyed())    liveRegionWindow.close();
   if (liveRegionIndicatorWindow && !liveRegionIndicatorWindow.isDestroyed()) liveRegionIndicatorWindow.close();
   liveRegionWindow = null;
@@ -2636,8 +2667,34 @@ async function pollLiveRegion(opts = {}) {
       return;
     }
 
-    if (!force && cleaned === liveRegionLastText) { liveRegionPolling = false; return; }
-    liveRegionLastText = cleaned;
+    // ── Token optimization: skip if content is basically the same ──
+    const normText = normalizeOcrText(cleaned);
+    if (!force) {
+      const sim = ocrWordSimilarity(normText, liveRegionLastNormText);
+      if (sim >= 0.80) {           // ≥80% same words → OCR noise, skip
+        liveRegionPolling = false;
+        return;
+      }
+    }
+    liveRegionLastNormText = normText;
+
+    // ── Cache lookup (avoids re-calling API for scroll-back content) ──
+    const cached = liveRegionTranslateCache.get(normText);
+    if (cached && !force) {
+      if (liveRegionWindow && !liveRegionWindow.isDestroyed()) {
+        const db = loadDatabase();
+        const allWords = new Set(db.words.map(w => w.word.toLowerCase()));
+        const { words: vocabWords } = extractVocabulary(cleaned);
+        const newWords = vocabWords.filter(w => !allWords.has(w.toLowerCase())).slice(0, 8);
+        liveRegionWindow.webContents.send('liveRegion:result', {
+          success: true, originalText: cleaned,
+          translation: cached, newWords,
+        });
+      }
+      console.log('📡 Cache hit — no API call');
+      liveRegionPolling = false;
+      return;
+    }
 
     if (liveRegionWindow && !liveRegionWindow.isDestroyed())
       liveRegionWindow.webContents.send('liveRegion:result', { loading: true, originalText: cleaned });
@@ -2647,6 +2704,15 @@ async function pollLiveRegion(opts = {}) {
     const translateResult = settings.apiKey
       ? await callLiveRegionTranslate(cleaned, settings.apiKey, settings.apiEndpoint, settings.model, settings.targetLanguage)
       : { success: false, error: 'No API key — open Dashboard → Settings' };
+
+    // ── Store in cache ──
+    if (translateResult.success && translateResult.translation) {
+      if (liveRegionTranslateCache.size >= LIVE_REGION_CACHE_MAX) {
+        // Evict oldest entry
+        liveRegionTranslateCache.delete(liveRegionTranslateCache.keys().next().value);
+      }
+      liveRegionTranslateCache.set(normText, translateResult.translation);
+    }
 
     const allWords = new Set(db.words.map(w => w.word.toLowerCase()));
     const { words: vocabWords } = extractVocabulary(cleaned);
@@ -2661,7 +2727,7 @@ async function pollLiveRegion(opts = {}) {
         newWords,
       });
     }
-    console.log('📡 Translated:', cleaned.slice(0, 60));
+    console.log('📡 Translated (API call):', cleaned.slice(0, 60));
   } catch (err) {
     console.error('📡 pollLiveRegion error:', err.message);
     if (liveRegionWindow && !liveRegionWindow.isDestroyed())
